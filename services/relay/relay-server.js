@@ -163,3 +163,4 @@ httpServer.listen(RELAY_HTTP_PORT, () => {
   console.log(`  Métricas de Infraestrutura: http://localhost:${RELAY_HTTP_PORT}/api/relay/metrics`);
   console.log(`=======================================================`);
 });
+

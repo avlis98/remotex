@@ -107,3 +107,4 @@ Write-Host "========================================================" -Foregroun
 if (-not $Silent) {
     Start-Process -FilePath $launcherBat
 }
+

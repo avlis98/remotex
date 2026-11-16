@@ -122,17 +122,17 @@ body {
 
 /* Left Sidebar */
 .sidebar {
-  width: 210px;
+  width: 190px;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  padding: 18px 12px;
+  padding: 14px 10px;
   user-select: none;
 }
 
 .sidebar-brand {
-  padding: 0 8px 24px 8px;
+  padding: 0 6px 18px 6px;
 }
 
 .brand-logo-combo {
@@ -142,7 +142,7 @@ body {
 }
 
 .brand-name {
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.5px;
   color: var(--text-white);
@@ -155,20 +155,20 @@ body {
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   background: transparent;
   border: none;
   border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -188,7 +188,7 @@ body {
 }
 
 .sidebar-footer {
-  padding-top: 14px;
+  padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -196,7 +196,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -217,14 +217,14 @@ body {
   background: radial-gradient(circle at 75% 25%, #0F1F38 0%, #081120 70%);
   display: flex;
   flex-direction: column;
-  padding: 34px 40px;
+  padding: 22px 28px;
   overflow-y: auto;
 }
 
 .watermark-logo {
   position: absolute;
-  bottom: -40px;
-  right: 15%;
+  bottom: -30px;
+  right: 10%;
   pointer-events: none;
   z-index: 1;
 }
@@ -240,11 +240,11 @@ body {
   display: block;
 }
 
-/* Workspace Grid (Matching the uploaded image) */
+/* Workspace Grid (Matching compact TeamViewer presentation) */
 .workspace-grid {
   display: grid;
-  grid-template-columns: 320px 400px;
-  gap: 28px;
+  grid-template-columns: 290px 380px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -253,8 +253,8 @@ body {
   background: rgba(14, 26, 45, 0.85);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 18px 20px;
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
   position: relative;
   overflow: hidden;
@@ -269,20 +269,20 @@ body {
 .host-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
 
 .card-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .field-label-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -295,14 +295,14 @@ body {
 
 .id-text {
   font-family: var(--font-main);
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 700;
   color: var(--text-white);
   letter-spacing: 0.5px;
 }
 
 .password-text {
-  font-size: 20px;
+  font-size: 18px;
   letter-spacing: 1px;
 }
 
