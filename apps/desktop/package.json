@@ -1,0 +1,16 @@
+{
+  "name": "remotex-desktop",
+  "version": "1.0.0",
+  "description": "RemoteX Desktop Application and Host Agent for Windows",
+  "main": "main.js",
+  "scripts": {
+    "start": "node agent-server.js",
+    "electron": "electron ."
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "remotex",
+  "version": "1.0.0",
+  "description": "RemoteX - Plataforma Própria de Acesso Remoto de Alta Performance",
+  "scripts": {
+    "start:signaling": "node services/signaling/server.js",
+    "start:desktop": "node apps/desktop/agent-server.js",
+    "build:native": "dotnet build native/RemoteXInput -c Release"
+  },
+  "keywords": [
+    "remote-desktop",
+    "webrtc",
+    "anydesk-alternative",
+    "teamviewer-alternative",
+    "win32-input",
+    "p2p"
+  ],
+  "author": "RemoteX Team",
+  "license": "Proprietary"
+}
+
