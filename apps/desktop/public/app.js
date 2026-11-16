@@ -113,6 +113,13 @@
   connectToSignaling();
 
   function initUI() {
+    // Ensure instant Device ID display so it never stays on "Carregando..."
+    if (!myDeviceId) {
+      const num = Math.floor(100000000 + Math.random() * 900000000);
+      myDeviceId = `${String(num).slice(0, 3)} ${String(num).slice(3, 6)} ${String(num).slice(6, 9)}`;
+      localStorage.setItem('remotex_device_id', myDeviceId);
+    }
+    if (myDeviceIdEl) myDeviceIdEl.textContent = myDeviceId;
     if (myPasswordDisplay) myPasswordDisplay.textContent = myPassword;
     loadRecentDevices();
 
@@ -417,8 +424,12 @@
   }
 
   function updateSignalingStatus(status, text) {
-    signalingStatusEl.className = `status-pill status-${status}`;
-    signalingTextEl.textContent = text;
+    if (signalingStatusEl) signalingStatusEl.className = `status-pill status-${status}`;
+    if (signalingTextEl) signalingTextEl.textContent = text;
+    const sidebarStatus = document.getElementById('sidebar-status-text');
+    if (sidebarStatus) sidebarStatus.textContent = status === 'connected' ? 'Online' : 'Conectando...';
+    const hostBadge = document.getElementById('host-status-badge');
+    if (hostBadge) hostBadge.textContent = status === 'connected' ? 'Online – Pronto para conectar' : 'Conectando ao servidor...';
   }
 
   function registerAsHost() {
