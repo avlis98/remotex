@@ -10,6 +10,15 @@ const devices = new Map();
 // sessions: Map<sessionId, { hostId, clientId, startedAt }>
 const sessions = new Map();
 
+const PUBLIC_ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' }
+];
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -30,11 +39,7 @@ const server = http.createServer((req, res) => {
       uptime: process.uptime(),
       activeDevices: devices.size,
       activeSessions: sessions.size,
-      iceServers: [
-        { urls: 'stun:localhost:3478' },
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ],
+      iceServers: PUBLIC_ICE_SERVERS,
       relayServers: [
         { url: 'ws://localhost:8081', type: 'remotex-relay' }
       ]
@@ -97,11 +102,7 @@ wss.on('connection', (ws, req) => {
             type: 'host_registered',
             deviceId: boundDeviceId,
             assignedPassword: data.password,
-            iceServers: [
-              { urls: 'stun:localhost:3478' },
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+            iceServers: PUBLIC_ICE_SERVERS
           });
           console.log(`[Signaling] Host registrado: ${boundDeviceId} (${clientIp})`);
           break;
@@ -155,11 +156,7 @@ wss.on('connection', (ws, req) => {
             type: 'connect_accepted',
             sessionId,
             targetDeviceId: targetId,
-            iceServers: [
-              { urls: 'stun:localhost:3478' },
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+            iceServers: PUBLIC_ICE_SERVERS
           });
           console.log(`[Signaling] Sessão autorizada: ${sessionId} (Target: ${targetId})`);
           break;

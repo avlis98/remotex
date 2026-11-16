@@ -18,6 +18,17 @@
   let chatDataChannel = null;    // chat messages
   let fileDataChannel = null;    // file transfers
 
+  const DEFAULT_ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
+
+  let pendingOffer = null;
+  let pendingIceCandidates = [];
+
   let myDeviceId = localStorage.getItem('remotex_device_id') || null;
   let myPassword = localStorage.getItem('remotex_temp_password') || generateRandomPassword();
   let unattendedEnabled = localStorage.getItem('remotex_unattended_enabled') === 'true';
@@ -503,7 +514,16 @@
         break;
 
       case 'sdp_offer':
-        await handleSdpOffer(msg.sessionId, msg.sdp, msg.fromDeviceId);
+        if (!peerConnection || !hostMediaStream) {
+          console.log('[Host] Oferta SDP recebida antes da inicialização completa. Enfileirando...');
+          pendingOffer = {
+            sessionId: msg.sessionId,
+            sdp: msg.sdp,
+            fromDeviceId: msg.fromDeviceId
+          };
+        } else {
+          await processSdpOffer(msg.sessionId, msg.sdp, msg.fromDeviceId);
+        }
         break;
 
       case 'sdp_answer':
@@ -511,10 +531,14 @@
         break;
 
       case 'ice_candidate':
-        if (peerConnection && msg.candidate) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(err => {
-            console.error('[WebRTC] Erro ao adicionar ICE candidate:', err);
-          });
+        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (err) {
+            console.warn('[WebRTC] Erro ao adicionar ICE candidate:', err);
+          }
+        } else {
+          pendingIceCandidates.push(msg.candidate);
         }
         break;
 
@@ -527,23 +551,32 @@
 
   // Host Mode: Prepare Screen Media Stream
   async function ensureHostScreenCapture() {
-    if (hostMediaStream) return hostMediaStream;
+    if (hostMediaStream && hostMediaStream.active && hostMediaStream.getVideoTracks().length > 0) {
+      return hostMediaStream;
+    }
 
     try {
       hostStreamLabel.textContent = 'Solicitando Compartilhamento...';
       hostMediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: 'always',
+          displaySurface: 'monitor',
           frameRate: { ideal: 60, max: 60 }
         },
         audio: false
       });
 
-      hostMediaStream.getVideoTracks()[0].onended = () => {
-        hostMediaStream = null;
-        btnStartHostScreen.classList.remove('active');
-        hostStreamLabel.textContent = 'Pronto para Conexões';
-      };
+      const videoTrack = hostMediaStream.getVideoTracks()[0];
+      if (videoTrack) {
+        if ('contentHint' in videoTrack) {
+          videoTrack.contentHint = 'motion';
+        }
+        videoTrack.onended = () => {
+          hostMediaStream = null;
+          btnStartHostScreen.classList.remove('active');
+          hostStreamLabel.textContent = 'Pronto para Conexões';
+        };
+      }
 
       btnStartHostScreen.classList.add('active');
       hostStreamLabel.textContent = 'Transmissão Ativa (Pronto)';
@@ -551,39 +584,26 @@
     } catch (err) {
       console.error('[Host] Erro ao capturar tela:', err);
       hostStreamLabel.textContent = 'Iniciar Transmissão de Tela';
-      alert('É necessário conceder permissão de captura de tela para receber conexões.');
       return null;
     }
   }
 
   // Host Mode: Handle incoming connection request
   async function handleIncomingHostSession(sessionId, fromClient) {
-    const stream = await ensureHostScreenCapture();
-    if (!stream) {
-      signalingWs.send(JSON.stringify({
-        type: 'end_session',
-        sessionId,
-        reason: 'O host não concedeu permissão para compartilhar a tela.'
-      }));
-      return;
-    }
-
+    activeSessionId = sessionId;
+    pendingIceCandidates = [];
+    pendingOffer = null;
     hostActiveNotice.classList.remove('hidden');
 
+    // 1. Criar PeerConnection imediatamente para preparar canais e receber candidatos
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      iceServers: DEFAULT_ICE_SERVERS
     });
     peerConnection = pc;
 
     setupPeerConnectionAutoReconnect(pc);
 
-    // Add video tracks
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-    // Listen for data channels
+    // Escutar data channels enviados pelo cliente
     pc.ondatachannel = (event) => {
       const channel = event.channel;
       if (channel.label === 'remotex-input') {
@@ -599,7 +619,7 @@
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && signalingWs.readyState === WebSocket.OPEN) {
+      if (event.candidate && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
         signalingWs.send(JSON.stringify({
           type: 'ice_candidate',
           sessionId,
@@ -607,6 +627,32 @@
         }));
       }
     };
+
+    // 2. Garantir captura de tela do host
+    const stream = await ensureHostScreenCapture();
+    if (!stream) {
+      signalingWs.send(JSON.stringify({
+        type: 'end_session',
+        sessionId,
+        reason: 'O host não concedeu permissão para compartilhar a tela.'
+      }));
+      endSessionLocally();
+      return;
+    }
+
+    // 3. Adicionar tracks de vídeo à conexão
+    stream.getTracks().forEach(track => {
+      if ('contentHint' in track) track.contentHint = 'motion';
+      pc.addTrack(track, stream);
+    });
+
+    // 4. Se a oferta SDP já chegou enquanto o usuário selecionava a tela, processar imediatamente
+    if (pendingOffer) {
+      console.log('[Host] Processando oferta SDP que estava na fila...');
+      const offerToProcess = pendingOffer;
+      pendingOffer = null;
+      await processSdpOffer(offerToProcess.sessionId, offerToProcess.sdp, offerToProcess.fromDeviceId);
+    }
   }
 
   // Auto Reconnection Handler
@@ -665,23 +711,54 @@
     };
   }
 
-  async function handleSdpOffer(sessionId, sdp, fromDeviceId) {
+  async function processSdpOffer(sessionId, sdp, fromDeviceId) {
     if (!peerConnection) return;
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+      console.log('[Host] Oferta SDP aplicada como remote description.');
 
-    signalingWs.send(JSON.stringify({
-      type: 'sdp_answer',
-      sessionId,
-      sdp: answer,
-      targetDeviceId: fromDeviceId
-    }));
+      // Despejar ICE candidates que chegaram antes da descrição remota
+      while (pendingIceCandidates.length > 0) {
+        const candidate = pendingIceCandidates.shift();
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[WebRTC] Erro ao aplicar ICE candidate pendente:', e);
+        }
+      }
+
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      signalingWs.send(JSON.stringify({
+        type: 'sdp_answer',
+        sessionId,
+        sdp: answer,
+        targetDeviceId: fromDeviceId
+      }));
+      console.log('[Host] SDP Answer enviado com sucesso para o controlador.');
+    } catch (e) {
+      console.error('[Host] Erro ao processar oferta SDP:', e);
+    }
   }
 
   async function handleSdpAnswer(sdp) {
-    if (peerConnection) {
+    if (!peerConnection) return;
+    try {
       await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+      console.log('[Controller] SDP Answer aplicado como remote description.');
+
+      // Despejar ICE candidates no controlador
+      while (pendingIceCandidates.length > 0) {
+        const candidate = pendingIceCandidates.shift();
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[WebRTC] Erro ao aplicar ICE candidate pendente no client:', e);
+        }
+      }
+    } catch (e) {
+      console.error('[Controller] Erro ao aplicar SDP Answer:', e);
     }
   }
 
@@ -712,8 +789,11 @@
   }
 
   async function setupClientPeerConnection(targetDeviceId, iceServers) {
+    pendingIceCandidates = [];
+    pendingOffer = null;
+
     const pc = new RTCPeerConnection({
-      iceServers: iceServers || [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: (iceServers && iceServers.length) ? iceServers : DEFAULT_ICE_SERVERS
     });
     peerConnection = pc;
 
@@ -748,9 +828,12 @@
 
     // Receive remote video stream
     pc.ontrack = (event) => {
-      console.log('[Controller] Stream de vídeo remoto recebido!');
+      console.log('[Controller] Stream de vídeo remoto recebido com sucesso!', event.streams[0]);
       videoLoader.classList.add('hidden');
-      remoteVideo.srcObject = event.streams[0];
+      if (remoteVideo.srcObject !== event.streams[0]) {
+        remoteVideo.srcObject = event.streams[0];
+      }
+      remoteVideo.play().catch(e => console.warn('[Video] Play caught:', e));
       
       event.track.onloadedmetadata = () => {
         metricResolution.textContent = `${remoteVideo.videoWidth}x${remoteVideo.videoHeight}`;
@@ -758,7 +841,7 @@
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && signalingWs.readyState === WebSocket.OPEN) {
+      if (event.candidate && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
         signalingWs.send(JSON.stringify({
           type: 'ice_candidate',
           sessionId: activeSessionId,
@@ -1172,6 +1255,8 @@
   }
 
   function endSessionLocally() {
+    pendingOffer = null;
+    pendingIceCandidates = [];
     if (pingInterval) clearInterval(pingInterval);
     if (statsInterval) clearInterval(statsInterval);
     if (peerConnection) {
