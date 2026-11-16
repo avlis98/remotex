@@ -16,6 +16,7 @@ if (Test-Path $tempPkg) {
 New-Item -ItemType Directory -Force -Path $tempPkg | Out-Null
 
 $itemsToCopy = @(
+    'Instalar RemoteX.exe',
     'RemoteX.vbs',
     'Instalar RemoteX.vbs',
     'setup_wizard.ps1',
