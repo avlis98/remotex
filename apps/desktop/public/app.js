@@ -3,7 +3,8 @@
   'use strict';
 
   // Configuration
-  const SIGNALING_URL = 'ws://localhost:8080';
+  const CLOUD_SIGNALING_URL = 'wss://pointing-mayor-send-wishes.trycloudflare.com';
+  let SIGNALING_URL = localStorage.getItem('remotex_signaling_url') || CLOUD_SIGNALING_URL;
   const LOCAL_INPUT_WS_URL = 'ws://localhost:3001';
   const CHUNK_SIZE = 64 * 1024; // 64KB chunks for optimal WebRTC SCTP throughput
 
@@ -122,6 +123,37 @@
     if (myDeviceIdEl) myDeviceIdEl.textContent = myDeviceId;
     if (myPasswordDisplay) myPasswordDisplay.textContent = myPassword;
     loadRecentDevices();
+
+    // Settings elements
+    const settingSignalingInput = document.getElementById('setting-signaling-url');
+    const btnSaveSignaling = document.getElementById('btn-save-signaling');
+    const btnResetSignalingLocal = document.getElementById('btn-reset-signaling-local');
+
+    if (settingSignalingInput) settingSignalingInput.value = SIGNALING_URL;
+
+    if (btnSaveSignaling) {
+      btnSaveSignaling.addEventListener('click', () => {
+        const newUrl = settingSignalingInput.value.trim();
+        if (newUrl) {
+          SIGNALING_URL = newUrl;
+          localStorage.setItem('remotex_signaling_url', SIGNALING_URL);
+          if (signalingWs) signalingWs.close();
+          connectToSignaling();
+          alert('Servidor atualizado! Reconectando ao endereço: ' + SIGNALING_URL);
+        }
+      });
+    }
+
+    if (btnResetSignalingLocal) {
+      btnResetSignalingLocal.addEventListener('click', () => {
+        SIGNALING_URL = 'ws://localhost:8080';
+        localStorage.setItem('remotex_signaling_url', SIGNALING_URL);
+        if (settingSignalingInput) settingSignalingInput.value = SIGNALING_URL;
+        if (signalingWs) signalingWs.close();
+        connectToSignaling();
+        alert('Restaurado para servidor local (ws://localhost:8080)');
+      });
+    }
 
     // Tab Navigation
     navItems.forEach(item => {

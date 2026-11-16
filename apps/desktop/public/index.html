@@ -301,10 +301,16 @@
           <div class="settings-card">
             <div class="setting-row">
               <div>
-                <strong>Servidor de Sinalização</strong>
-                <p>Endereço WebSocket do servidor central</p>
+                <strong>Servidor Central de Conexão</strong>
+                <p>Endereço de sincronização entre diferentes PCs (Internet/Nuvem)</p>
               </div>
-              <input type="text" id="setting-signaling-url" class="input-remotex" value="ws://localhost:8080" style="max-width: 260px;" readonly />
+              <div style="display:flex; flex-direction:column; gap:8px; width: 100%; max-width: 320px;">
+                <input type="text" id="setting-signaling-url" class="input-remotex" value="wss://pointing-mayor-send-wishes.trycloudflare.com" />
+                <div style="display:flex; gap:6px;">
+                  <button id="btn-save-signaling" class="btn-primary-blue" style="padding: 8px 14px; font-size: 12px;">Salvar e Reconectar</button>
+                  <button id="btn-reset-signaling-local" class="btn-subtle-stream" style="padding: 8px 10px; font-size: 11px;">Restaurar Local</button>
+                </div>
+              </div>
             </div>
             <div class="setting-row">
               <div>
