@@ -1,23 +1,37 @@
-// RemoteX Client & WebRTC Controller
+// RemoteX Client & WebRTC Controller - Etapa 2
 (function() {
   'use strict';
 
   // Configuration
   const SIGNALING_URL = 'ws://localhost:8080';
   const LOCAL_INPUT_WS_URL = 'ws://localhost:3001';
+  const CHUNK_SIZE = 64 * 1024; // 64KB chunks for optimal WebRTC SCTP throughput
 
   // State
   let signalingWs = null;
   let localInputWs = null;
   let peerConnection = null;
-  let inputDataChannel = null;
   
+  // Dedicated WebRTC Data Channels
+  let inputDataChannel = null;   // mouse/keyboard
+  let chatDataChannel = null;    // chat messages
+  let fileDataChannel = null;    // file transfers
+
   let myDeviceId = localStorage.getItem('remotex_device_id') || null;
   let myPassword = localStorage.getItem('remotex_temp_password') || generateRandomPassword();
+  let unattendedEnabled = localStorage.getItem('remotex_unattended_enabled') === 'true';
+  let unattendedPassword = localStorage.getItem('remotex_unattended_pwd') || '';
+  
   let hostMediaStream = null;
   let activeSessionId = null;
   let isInputControlEnabled = true;
   let pingInterval = null;
+  let unreadChatCount = 0;
+  let isChatOpen = false;
+  let isFilesOpen = false;
+
+  // File Transfer State
+  let activeTransfers = new Map(); // transferId -> { name, size, receivedBytes, chunks, startTime, isIncoming, canceled }
 
   // DOM Elements
   const myDeviceIdEl = document.getElementById('my-device-id');
@@ -28,6 +42,14 @@
   const hostStreamLabel = document.getElementById('host-stream-label');
   const hostActiveNotice = document.getElementById('host-active-notice');
 
+  // Unattended Access Elements
+  const unattendedToggle = document.getElementById('unattended-toggle');
+  const unattendedSettings = document.getElementById('unattended-settings');
+  const unattendedPasswordInput = document.getElementById('unattended-password');
+  const btnSaveUnattended = document.getElementById('btn-save-unattended');
+  const unattendedSavedPill = document.getElementById('unattended-saved-pill');
+
+  // Connection Elements
   const remoteDeviceIdInput = document.getElementById('remote-device-id');
   const remotePasswordInput = document.getElementById('remote-password');
   const btnConnect = document.getElementById('btn-connect');
@@ -43,12 +65,37 @@
   const remoteVideo = document.getElementById('remote-video');
   const videoLoader = document.getElementById('video-loader');
   const sessionTargetName = document.getElementById('session-target-name');
+  const sessionStatusDot = document.getElementById('session-status-dot');
   const metricPing = document.getElementById('metric-ping');
   const metricResolution = document.getElementById('metric-resolution');
+  const reconnectingOverlay = document.getElementById('reconnecting-overlay');
+
+  // Toolbar Actions
+  const btnMonitors = document.getElementById('btn-monitors');
+  const monitorsMenu = document.getElementById('monitors-menu');
+  const btnFiles = document.getElementById('btn-files');
+  const btnChat = document.getElementById('btn-chat');
+  const chatBadge = document.getElementById('chat-badge');
+  const btnSyncClipboard = document.getElementById('btn-sync-clipboard');
   const btnToggleInput = document.getElementById('btn-toggle-input');
   const btnFullscreen = document.getElementById('btn-fullscreen');
   const btnRestartRemote = document.getElementById('btn-restart-remote');
   const btnDisconnect = document.getElementById('btn-disconnect');
+
+  // File Manager Elements
+  const fileModal = document.getElementById('file-modal');
+  const btnCloseFiles = document.getElementById('btn-close-files');
+  const fileDropZone = document.getElementById('file-drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const btnSelectFile = document.getElementById('btn-select-file');
+  const transferList = document.getElementById('transfer-list');
+
+  // Chat Elements
+  const chatDrawer = document.getElementById('chat-drawer');
+  const btnCloseChat = document.getElementById('btn-close-chat');
+  const chatMessages = document.getElementById('chat-messages');
+  const chatInput = document.getElementById('chat-input');
+  const btnSendChat = document.getElementById('btn-send-chat');
 
   // Initialize
   initUI();
@@ -58,6 +105,36 @@
   function initUI() {
     myPasswordEl.value = myPassword;
     loadRecentDevices();
+
+    // Unattended access restore
+    unattendedToggle.checked = unattendedEnabled;
+    if (unattendedEnabled) {
+      unattendedSettings.classList.remove('hidden');
+      if (unattendedPassword) {
+        unattendedPasswordInput.value = unattendedPassword;
+        unattendedSavedPill.classList.remove('hidden');
+      }
+    }
+
+    unattendedToggle.addEventListener('change', () => {
+      unattendedEnabled = unattendedToggle.checked;
+      localStorage.setItem('remotex_unattended_enabled', unattendedEnabled ? 'true' : 'false');
+      unattendedSettings.classList.toggle('hidden', !unattendedEnabled);
+      registerAsHost();
+    });
+
+    btnSaveUnattended.addEventListener('click', () => {
+      const pwd = unattendedPasswordInput.value.trim();
+      if (!pwd) {
+        alert('Defina uma senha válida para o acesso não supervisionado.');
+        return;
+      }
+      unattendedPassword = pwd;
+      localStorage.setItem('remotex_unattended_pwd', unattendedPassword);
+      unattendedSavedPill.classList.remove('hidden');
+      registerAsHost();
+      alert('Senha permanente salva com sucesso!');
+    });
 
     // ID formatting: 000 000 000
     remoteDeviceIdInput.addEventListener('input', (e) => {
@@ -83,9 +160,7 @@
       myPassword = generateRandomPassword();
       myPasswordEl.value = myPassword;
       localStorage.setItem('remotex_temp_password', myPassword);
-      if (signalingWs && signalingWs.readyState === WebSocket.OPEN) {
-        registerAsHost();
-      }
+      registerAsHost();
     });
 
     btnStartHostScreen.addEventListener('click', async () => {
@@ -112,6 +187,109 @@
         sessionOverlay.requestFullscreen().catch(err => console.error(err));
       } else {
         document.exitFullscreen().catch(err => console.error(err));
+      }
+    });
+
+    // Monitors Menu
+    btnMonitors.addEventListener('click', (e) => {
+      e.stopPropagation();
+      monitorsMenu.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('.dropdown-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        document.querySelectorAll('.dropdown-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        monitorsMenu.classList.add('hidden');
+        if (inputDataChannel && inputDataChannel.readyState === 'open') {
+          inputDataChannel.send(JSON.stringify({
+            type: 'switch_monitor',
+            target: item.getAttribute('data-screen')
+          }));
+        }
+      });
+    });
+
+    document.addEventListener('click', () => {
+      monitorsMenu.classList.add('hidden');
+    });
+
+    // File Manager
+    btnFiles.addEventListener('click', () => {
+      isFilesOpen = !isFilesOpen;
+      fileModal.classList.toggle('hidden', !isFilesOpen);
+    });
+
+    btnCloseFiles.addEventListener('click', () => {
+      isFilesOpen = false;
+      fileModal.classList.add('hidden');
+    });
+
+    btnSelectFile.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        sendFile(e.target.files[0]);
+      }
+    });
+
+    // File Drag and drop
+    fileDropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileDropZone.classList.add('dragover');
+    });
+
+    fileDropZone.addEventListener('dragleave', () => {
+      fileDropZone.classList.remove('dragover');
+    });
+
+    fileDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileDropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        sendFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    // Chat Drawer
+    btnChat.addEventListener('click', () => {
+      isChatOpen = !isChatOpen;
+      chatDrawer.classList.toggle('hidden', !isChatOpen);
+      if (isChatOpen) {
+        unreadChatCount = 0;
+        chatBadge.classList.add('hidden');
+        chatBadge.textContent = '0';
+        chatInput.focus();
+      }
+    });
+
+    btnCloseChat.addEventListener('click', () => {
+      isChatOpen = false;
+      chatDrawer.classList.add('hidden');
+    });
+
+    btnSendChat.addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+
+    // Clipboard Sync
+    btnSyncClipboard.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && inputDataChannel && inputDataChannel.readyState === 'open') {
+          inputDataChannel.send(JSON.stringify({
+            type: 'clipboard_sync',
+            text
+          }));
+          alert('Área de transferência sincronizada com o computador remoto.');
+        } else {
+          alert('Área de transferência local vazia.');
+        }
+      } catch (err) {
+        alert('Não foi possível ler a área de transferência local.');
       }
     });
 
@@ -142,9 +320,6 @@
       localInputWs = new WebSocket(LOCAL_INPUT_WS_URL);
       localInputWs.onopen = () => {
         console.log('[RemoteX] Conectado ao agente nativo de entrada Win32.');
-      };
-      localInputWs.onerror = () => {
-        // Fallback silently if running purely in browser without local agent
       };
       localInputWs.onclose = () => {
         setTimeout(connectToLocalInputAgent, 3000);
@@ -198,6 +373,7 @@
         type: 'register_host',
         deviceId: myDeviceId,
         password: myPassword,
+        unattendedPassword: (unattendedEnabled && unattendedPassword) ? unattendedPassword : null,
         hostname: navigator.userAgent.includes('Windows') ? 'PC Windows' : 'Host Device',
         os: 'Windows 11'
       }));
@@ -210,7 +386,7 @@
         myDeviceId = msg.deviceId;
         localStorage.setItem('remotex_device_id', myDeviceId);
         myDeviceIdEl.textContent = myDeviceId;
-        console.log(`[RemoteX] Registrado no servidor com ID: ${myDeviceId}`);
+        console.log(`[RemoteX] Registrado com ID: ${myDeviceId}`);
         break;
 
       case 'connect_error':
@@ -305,15 +481,23 @@
     });
     peerConnection = pc;
 
+    setupPeerConnectionAutoReconnect(pc);
+
     // Add video tracks
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-    // Listen for data channel created by controller
+    // Listen for data channels
     pc.ondatachannel = (event) => {
       const channel = event.channel;
       if (channel.label === 'remotex-input') {
         inputDataChannel = channel;
         setupHostDataChannelListener(channel);
+      } else if (channel.label === 'remotex-chat') {
+        chatDataChannel = channel;
+        setupChatChannelListener(channel);
+      } else if (channel.label === 'remotex-files') {
+        fileDataChannel = channel;
+        setupFileChannelListener(channel);
       }
     };
 
@@ -328,6 +512,24 @@
     };
   }
 
+  // Auto Reconnection Handler
+  function setupPeerConnectionAutoReconnect(pc) {
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
+      console.log(`[WebRTC] ICE Connection State: ${state}`);
+      if (state === 'disconnected') {
+        reconnectingOverlay.classList.remove('hidden');
+        sessionStatusDot.classList.add('warning');
+      } else if (state === 'connected' || state === 'completed') {
+        reconnectingOverlay.classList.add('hidden');
+        sessionStatusDot.classList.remove('warning');
+      } else if (state === 'failed') {
+        reconnectingOverlay.querySelector('span').textContent = 'Tentando reiniciar ICE...';
+        pc.restartIce();
+      }
+    };
+  }
+
   // Host Mode: Handle input commands received from remote controller
   function setupHostDataChannelListener(channel) {
     channel.onmessage = (event) => {
@@ -335,6 +537,18 @@
         const cmd = JSON.parse(event.data);
         if (cmd.type === 'ping') {
           channel.send(JSON.stringify({ type: 'pong', sendTime: cmd.sendTime }));
+          return;
+        }
+
+        if (cmd.type === 'clipboard_sync') {
+          console.log('[Host] Clipboard sync recebido:', cmd.text);
+          navigator.clipboard.writeText(cmd.text).catch(() => {});
+          return;
+        }
+
+        if (cmd.type === 'switch_monitor') {
+          console.log('[Host] Solicitação de alternância de tela para:', cmd.target);
+          ensureHostScreenCapture();
           return;
         }
 
@@ -406,17 +620,17 @@
     });
     peerConnection = pc;
 
-    // Create reliable low-latency SCTP data channel for mouse/keyboard
+    setupPeerConnectionAutoReconnect(pc);
+
+    // 1. Data Channel: Input
     inputDataChannel = pc.createDataChannel('remotex-input', {
       ordered: true,
-      maxRetransmits: 0 // Prioritize lowest latency for live input
+      maxRetransmits: 0
     });
-
     inputDataChannel.onopen = () => {
-      console.log('[Controller] Canal de dados de entrada aberto com sucesso.');
+      console.log('[Controller] Canal de dados de entrada ativo.');
       startPingMonitoring();
     };
-
     inputDataChannel.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
@@ -426,6 +640,14 @@
         }
       } catch (err) {}
     };
+
+    // 2. Data Channel: Chat
+    chatDataChannel = pc.createDataChannel('remotex-chat', { ordered: true });
+    setupChatChannelListener(chatDataChannel);
+
+    // 3. Data Channel: File Transfer
+    fileDataChannel = pc.createDataChannel('remotex-files', { ordered: true });
+    setupFileChannelListener(fileDataChannel);
 
     // Receive remote video stream
     pc.ontrack = (event) => {
@@ -470,6 +692,214 @@
     resetConnectButton();
   }
 
+  // Chat Subsystem
+  function setupChatChannelListener(channel) {
+    channel.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'chat_message') {
+          appendChatMessage(msg.text, 'incoming', msg.timestamp);
+          if (!isChatOpen) {
+            unreadChatCount++;
+            chatBadge.textContent = unreadChatCount;
+            chatBadge.classList.remove('hidden');
+          }
+        }
+      } catch (err) {}
+    };
+  }
+
+  function sendChatMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    if (chatDataChannel && chatDataChannel.readyState === 'open') {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      chatDataChannel.send(JSON.stringify({
+        type: 'chat_message',
+        text,
+        timestamp: timeStr
+      }));
+      appendChatMessage(text, 'outgoing', timeStr);
+      chatInput.value = '';
+    }
+  }
+
+  function appendChatMessage(text, direction, timeStr) {
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${direction}`;
+    bubble.innerHTML = `
+      <div>${escapeHtml(text)}</div>
+      <div class="chat-time">${timeStr || ''}</div>
+    `;
+    chatMessages.appendChild(bubble);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  // File Transfer Subsystem
+  function setupFileChannelListener(channel) {
+    channel.binaryType = 'arraybuffer';
+    let currentIncoming = null;
+
+    channel.onmessage = (e) => {
+      // If metadata header received
+      if (typeof e.data === 'string') {
+        try {
+          const meta = JSON.parse(e.data);
+          if (meta.type === 'file_header') {
+            currentIncoming = {
+              id: meta.id,
+              name: meta.name,
+              size: meta.size,
+              receivedBytes: 0,
+              chunks: [],
+              startTime: performance.now()
+            };
+            activeTransfers.set(meta.id, currentIncoming);
+            renderTransferItem(currentIncoming, true);
+          } else if (meta.type === 'file_cancel') {
+            const item = activeTransfers.get(meta.id);
+            if (item) {
+              item.canceled = true;
+              updateTransferUI(item, 'Cancelado');
+            }
+          }
+        } catch (err) {}
+      } 
+      // If binary chunk received
+      else if (e.data instanceof ArrayBuffer) {
+        if (!currentIncoming || currentIncoming.canceled) return;
+        currentIncoming.chunks.push(e.data);
+        currentIncoming.receivedBytes += e.data.byteLength;
+
+        updateTransferProgress(currentIncoming);
+
+        // Complete check
+        if (currentIncoming.receivedBytes >= currentIncoming.size) {
+          const blob = new Blob(currentIncoming.chunks);
+          saveReceivedFile(blob, currentIncoming.name);
+          updateTransferUI(currentIncoming, 'Concluído');
+          currentIncoming = null;
+        }
+      }
+    };
+  }
+
+  async function sendFile(file) {
+    if (!fileDataChannel || fileDataChannel.readyState !== 'open') {
+      alert('Canal de transferência de arquivos indisponível no momento.');
+      return;
+    }
+
+    const transferId = 'transfer-' + Math.random().toString(36).substr(2, 9);
+    const transfer = {
+      id: transferId,
+      name: file.name,
+      size: file.size,
+      receivedBytes: 0,
+      startTime: performance.now()
+    };
+    activeTransfers.set(transferId, transfer);
+    renderTransferItem(transfer, false);
+
+    // Send metadata header
+    fileDataChannel.send(JSON.stringify({
+      type: 'file_header',
+      id: transferId,
+      name: file.name,
+      size: file.size
+    }));
+
+    // Read and stream in 64KB chunks
+    const reader = file.stream().getReader();
+    let sent = 0;
+
+    while (true) {
+      if (transfer.canceled) {
+        fileDataChannel.send(JSON.stringify({ type: 'file_cancel', id: transferId }));
+        updateTransferUI(transfer, 'Cancelado');
+        break;
+      }
+
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // Handle SCTP backpressure buffer
+      while (fileDataChannel.bufferedAmount > 8 * 1024 * 1024) {
+        await new Promise(r => setTimeout(r, 20));
+      }
+
+      fileDataChannel.send(value.buffer);
+      sent += value.byteLength;
+      transfer.receivedBytes = sent;
+      updateTransferProgress(transfer);
+    }
+
+    if (!transfer.canceled) {
+      updateTransferUI(transfer, 'Concluído');
+    }
+  }
+
+  function renderTransferItem(transfer, isIncoming) {
+    const emptyNotice = transferList.querySelector('.recent-empty');
+    if (emptyNotice) emptyNotice.remove();
+
+    const card = document.createElement('div');
+    card.id = `item-${transfer.id}`;
+    card.className = 'transfer-item-card';
+    card.innerHTML = `
+      <div class="transfer-meta">
+        <span class="transfer-name">${isIncoming ? '⬇️ ' : '⬆️ '}${escapeHtml(transfer.name)}</span>
+        <span class="transfer-status" id="status-${transfer.id}">0%</span>
+      </div>
+      <div class="transfer-progress-bg">
+        <div class="transfer-progress-fill" id="fill-${transfer.id}"></div>
+      </div>
+      <div class="transfer-stats">
+        <span id="speed-${transfer.id}">Calculando...</span>
+        <span id="size-${transfer.id}">${formatBytes(transfer.size)}</span>
+      </div>
+    `;
+    transferList.prepend(card);
+  }
+
+  function updateTransferProgress(transfer) {
+    const fill = document.getElementById(`fill-${transfer.id}`);
+    const status = document.getElementById(`status-${transfer.id}`);
+    const speed = document.getElementById(`speed-${transfer.id}`);
+    if (!fill || !status) return;
+
+    const percent = Math.min(100, Math.round((transfer.receivedBytes / transfer.size) * 100));
+    fill.style.width = `${percent}%`;
+    status.textContent = `${percent}%`;
+
+    const elapsed = (performance.now() - transfer.startTime) / 1000;
+    if (elapsed > 0.5) {
+      const bytesPerSec = transfer.receivedBytes / elapsed;
+      speed.textContent = `${formatBytes(bytesPerSec)}/s`;
+    }
+  }
+
+  function updateTransferUI(transfer, finalStatus) {
+    const status = document.getElementById(`status-${transfer.id}`);
+    const speed = document.getElementById(`speed-${transfer.id}`);
+    if (status) status.textContent = finalStatus;
+    if (speed && finalStatus === 'Concluído') speed.textContent = '100% Finalizado';
+  }
+
+  function saveReceivedFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
   // Interactive Remote Mouse and Keyboard Input Capture
   function setupRemoteInputCapture() {
     let lastMoveTime = 0;
@@ -501,7 +931,7 @@
 
       inputDataChannel.send(JSON.stringify({
         type: 'mouse_down',
-        button: e.button // 0: left, 1: middle, 2: right
+        button: e.button
       }));
     });
 
@@ -516,7 +946,6 @@
       }));
     });
 
-    // Prevent default context menu on right click
     remoteVideo.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
@@ -535,8 +964,6 @@
     // Keyboard Events
     remoteVideo.addEventListener('keydown', (e) => {
       if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
-      
-      // Let developer shortcuts (F12, etc.) work if needed
       if (e.key === 'F12') return;
       e.preventDefault();
 
@@ -547,7 +974,6 @@
         vkCode: e.keyCode
       }));
 
-      // Send text character if printable
       if (e.key.length === 1 && !e.ctrlKey && !e.altKey) {
         inputDataChannel.send(JSON.stringify({
           type: 'text',
@@ -602,9 +1028,19 @@
       inputDataChannel.close();
       inputDataChannel = null;
     }
+    if (chatDataChannel) {
+      chatDataChannel.close();
+      chatDataChannel = null;
+    }
+    if (fileDataChannel) {
+      fileDataChannel.close();
+      fileDataChannel = null;
+    }
     activeSessionId = null;
     sessionOverlay.classList.add('hidden');
     hostActiveNotice.classList.add('hidden');
+    fileModal.classList.add('hidden');
+    chatDrawer.classList.add('hidden');
     remoteVideo.srcObject = null;
     resetConnectButton();
   }
@@ -663,5 +1099,16 @@
       recentDevicesList.appendChild(item);
     });
   }
-})();
 
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();

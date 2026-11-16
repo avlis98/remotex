@@ -81,6 +81,7 @@ wss.on('connection', (ws, req) => {
           devices.set(boundDeviceId, {
             ws,
             password: data.password || '123456',
+            unattendedPassword: data.unattendedPassword || null,
             hostname: data.hostname || 'Host PC',
             os: data.os || 'Windows 11',
             ip: clientIp,
@@ -116,7 +117,10 @@ wss.on('connection', (ws, req) => {
             return;
           }
 
-          if (targetHost.password !== providedPassword) {
+          const isTempPasswordValid = targetHost.password && targetHost.password === providedPassword;
+          const isUnattendedValid = targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
+
+          if (!isTempPasswordValid && !isUnattendedValid) {
             send(ws, {
               type: 'connect_error',
               code: 'INVALID_PASSWORD',
