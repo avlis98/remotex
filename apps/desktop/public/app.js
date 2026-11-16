@@ -26,6 +26,7 @@
   let activeSessionId = null;
   let isInputControlEnabled = true;
   let pingInterval = null;
+  let statsInterval = null;
   let unreadChatCount = 0;
   let isChatOpen = false;
   let isFilesOpen = false;
@@ -1058,6 +1059,62 @@
         }));
       }
     }, 1500);
+
+    startPerformanceTelemetry();
+  }
+
+  function startPerformanceTelemetry() {
+    if (statsInterval) clearInterval(statsInterval);
+    let prevBytes = 0;
+    let prevTimestamp = 0;
+
+    statsInterval = setInterval(async () => {
+      if (!peerConnection) return;
+      try {
+        const stats = await peerConnection.getStats();
+        let fps = 60;
+        let bitrateMbps = 0;
+        let packetsLost = 0;
+        let totalPackets = 0;
+
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            if (report.framesPerSecond) fps = Math.round(report.framesPerSecond);
+            if (report.packetsLost) packetsLost = report.packetsLost;
+            if (report.packetsReceived) totalPackets = report.packetsReceived + packetsLost;
+
+            if (prevTimestamp && report.bytesReceived) {
+              const deltaBytes = report.bytesReceived - prevBytes;
+              const deltaTime = (report.timestamp - prevTimestamp) / 1000;
+              if (deltaTime > 0) {
+                bitrateMbps = ((deltaBytes * 8) / (deltaTime * 1000000)).toFixed(1);
+              }
+            }
+            prevBytes = report.bytesReceived || 0;
+            prevTimestamp = report.timestamp;
+          }
+        });
+
+        // Compute loss rate
+        const lossRate = totalPackets > 0 ? ((packetsLost / totalPackets) * 100).toFixed(1) : 0;
+        metricResolution.textContent = `${remoteVideo.videoWidth || 1920}x${remoteVideo.videoHeight || 1080} | ${fps} FPS | ${bitrateMbps} Mbps | ${lossRate}% Perda`;
+
+        // Congestion Control: Color code status indicator
+        if (lossRate > 5 || (metricPing && parseInt(metricPing.textContent) > 150)) {
+          sessionStatusDot.className = 'status-dot-green';
+          sessionStatusDot.style.backgroundColor = '#EF4444';
+          sessionStatusDot.style.boxShadow = '0 0 8px #EF4444';
+        } else if (lossRate > 2 || (metricPing && parseInt(metricPing.textContent) > 80)) {
+          sessionStatusDot.className = 'status-dot-green';
+          sessionStatusDot.style.backgroundColor = '#F59E0B';
+          sessionStatusDot.style.boxShadow = '0 0 8px #F59E0B';
+        } else {
+          sessionStatusDot.className = 'status-dot-green';
+          sessionStatusDot.style.backgroundColor = '#10B981';
+          sessionStatusDot.style.boxShadow = '0 0 8px #10B981';
+        }
+      } catch (err) {}
+    }, 2000);
   }
 
   function endSession(reason) {
@@ -1073,6 +1130,7 @@
 
   function endSessionLocally() {
     if (pingInterval) clearInterval(pingInterval);
+    if (statsInterval) clearInterval(statsInterval);
     if (peerConnection) {
       peerConnection.close();
       peerConnection = null;

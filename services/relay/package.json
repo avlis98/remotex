@@ -1,0 +1,12 @@
+{
+  "name": "remotex-relay",
+  "version": "1.0.0",
+  "description": "RemoteX Dedicated TURN and Relay Media Server",
+  "main": "relay-server.js",
+  "scripts": {
+    "start": "node relay-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
