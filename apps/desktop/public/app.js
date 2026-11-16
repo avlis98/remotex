@@ -35,12 +35,21 @@
 
   // DOM Elements
   const myDeviceIdEl = document.getElementById('my-device-id');
-  const myPasswordEl = document.getElementById('my-password');
+  const myPasswordDisplay = document.getElementById('my-password-display');
   const btnCopyId = document.getElementById('btn-copy-id');
   const btnRefreshPassword = document.getElementById('btn-refresh-password');
   const btnStartHostScreen = document.getElementById('btn-start-host-screen');
   const hostStreamLabel = document.getElementById('host-stream-label');
   const hostActiveNotice = document.getElementById('host-active-notice');
+
+  // Sidebar Tabs
+  const navItems = document.querySelectorAll('.nav-item');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  // Window Controls
+  const winClose = document.querySelector('.win-close');
+  const winMinimize = document.querySelector('.win-minimize');
+  const winMaximize = document.querySelector('.win-maximize');
 
   // Unattended Access Elements
   const unattendedToggle = document.getElementById('unattended-toggle');
@@ -103,8 +112,52 @@
   connectToSignaling();
 
   function initUI() {
-    myPasswordEl.value = myPassword;
+    if (myPasswordDisplay) myPasswordDisplay.textContent = myPassword;
     loadRecentDevices();
+
+    // Tab Navigation
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        const tabTarget = item.getAttribute('data-tab');
+        tabContents.forEach(tab => {
+          tab.classList.toggle('active', tab.id === `tab-${tabTarget}`);
+        });
+      });
+    });
+
+    // Window controls
+    if (winClose) {
+      winClose.addEventListener('click', () => {
+        if (confirm('Deseja minimizar ou fechar o RemoteX?')) window.close();
+      });
+    }
+    if (winMinimize) {
+      winMinimize.addEventListener('click', () => {
+        alert('RemoteX minimizado para a bandeja do sistema.');
+      });
+    }
+    if (winMaximize) {
+      winMaximize.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+    }
+
+    // Recent items click
+    document.querySelectorAll('.recent-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const id = row.getAttribute('data-id');
+        if (id) {
+          remoteDeviceIdInput.value = id;
+          remotePasswordInput.focus();
+        }
+      });
+    });
 
     // Unattended access restore
     unattendedToggle.checked = unattendedEnabled;
@@ -158,7 +211,7 @@
 
     btnRefreshPassword.addEventListener('click', () => {
       myPassword = generateRandomPassword();
-      myPasswordEl.value = myPassword;
+      if (myPasswordDisplay) myPasswordDisplay.textContent = myPassword;
       localStorage.setItem('remotex_temp_password', myPassword);
       registerAsHost();
     });
@@ -306,12 +359,12 @@
   }
 
   function generateRandomPassword() {
-    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    let res = '';
-    for (let i = 0; i < 6; i++) {
-      res += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return res;
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let p1 = '';
+    let p2 = '';
+    for (let i = 0; i < 4; i++) p1 += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 4; i++) p2 += chars.charAt(Math.floor(Math.random() * chars.length));
+    return `${p1}-${p2}`;
   }
 
   // Local Input Agent (Win32 SendInput Worker)

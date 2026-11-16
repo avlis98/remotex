@@ -3,190 +3,353 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RemoteX - Plataforma de Acesso Remoto</title>
+  <title>RemoteX - Conecte. Acesse. Resolva.</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 </head>
-<body class="theme-dark">
-  <div id="app">
-    <!-- Top Navigation Bar -->
-    <header class="app-header">
-      <div class="logo-container">
-        <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="20" height="14" x="2" y="3" rx="2"/>
-            <line x1="8" x2="16" y1="21" y2="21"/>
-            <line x1="12" x2="12" y1="17" y2="21"/>
-            <path d="m10 9 2 2 4-4"/>
-          </svg>
-        </div>
-        <div class="logo-text">
-          <span class="logo-brand">Remote<span class="logo-accent">X</span></span>
-          <span class="badge-version">v1.1.0 Etapa 2</span>
-        </div>
+<body class="theme-remotex">
+  <div class="window-frame">
+    <!-- Window Titlebar -->
+    <div class="window-titlebar">
+      <div class="titlebar-left">
+        <svg class="remotex-logo-icon-sm" viewBox="0 0 100 100" width="18" height="18">
+          <path d="M18 15 C18 15, 48 15, 62 15 C76 15, 84 25, 84 38 C84 50, 75 58, 60 60 L60 61 C68 62, 73 68, 77 75 L86 90 L68 90 L59 76 C56 70, 52 68, 44 68 L36 68 L36 90 L18 90 Z" fill="#FFFFFF"/>
+          <path d="M36 31 L58 31 C65 31, 68 34, 68 40 C68 46, 64 49, 58 49 L36 49 Z" fill="#0C1527"/>
+          <path d="M10 65 C12 40, 26 25, 48 18 C30 26, 18 42, 18 68 C18 78, 22 84, 28 88 C20 84, 10 76, 10 65 Z" fill="#00C2FF"/>
+          <!-- Cursor arrow on leg -->
+          <polygon points="68,60 88,86 78,86 74,96 66,92 70,82 58,82" fill="#00C2FF"/>
+        </svg>
+        <span class="titlebar-title">RemoteX</span>
       </div>
-
-      <div class="header-status">
-        <a href="https://github.com/avlis98/remotex" target="_blank" class="github-link" title="Repositório GitHub">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
-          </svg>
-          <span>GitHub</span>
-        </a>
-        <div id="signaling-status" class="status-pill status-disconnected">
-          <span class="status-dot"></span>
-          <span id="signaling-text">Conectando ao Servidor...</span>
-        </div>
+      <div class="titlebar-controls">
+        <button class="win-btn win-minimize" title="Minimizar">─</button>
+        <button class="win-btn win-maximize" title="Maximizar">□</button>
+        <button class="win-btn win-close" title="Fechar">✕</button>
       </div>
-    </header>
+    </div>
 
-    <!-- Main Workspace (Connection Cards) -->
-    <main class="main-content" id="main-view">
-      <div class="cards-grid">
-        <!-- Card 1: Este Computador (Host) -->
-        <div class="card card-host">
-          <div class="card-header">
-            <div class="card-title-icon host-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
-                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
-                <line x1="6" y1="6" x2="6.01" y2="6"/>
-                <line x1="6" y1="18" x2="6.01" y2="18"/>
-              </svg>
-            </div>
-            <div>
-              <h2>Este Computador</h2>
-              <p class="subtitle">Compartilhe seu ID para receber assistência</p>
-            </div>
+    <!-- Main Application Shell -->
+    <div class="app-layout">
+      <!-- Left Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-logo-combo">
+            <svg class="remotex-logo-svg" viewBox="0 0 100 100" width="34" height="34">
+              <!-- Stylized R with cyan swoosh and cursor -->
+              <path d="M22 14 H60 C78 14, 88 25, 88 40 C88 52, 79 61, 64 64 L86 92 H66 L48 68 H38 V92 H22 Z" fill="#FFFFFF"/>
+              <path d="M38 30 H58 C66 30, 71 33, 71 40 C71 47, 66 50, 58 50 H38 Z" fill="#0A111F"/>
+              <path d="M12 68 C12 38, 30 20, 54 14 C34 22, 22 40, 22 68 C22 79, 27 85, 34 89 C22 84, 12 77, 12 68 Z" fill="#00C2FF"/>
+              <polygon points="70,62 94,88 84,89 80,98 72,94 76,85 64,84" fill="#00C2FF"/>
+            </svg>
+            <span class="brand-name">Remote<span class="brand-x">X</span></span>
           </div>
+        </div>
 
-          <div class="card-body">
-            <div class="field-group">
-              <label for="my-device-id">Seu ID de Acesso</label>
-              <div class="id-display-container">
-                <span id="my-device-id" class="code-id">Carregando...</span>
-                <button id="btn-copy-id" class="btn-icon" title="Copiar ID">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-tab="home">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span>Início</span>
+          </button>
+
+          <button class="nav-item" data-tab="computers">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <line x1="8" x2="16" y1="21" y2="21"/>
+              <line x1="12" x2="12" y1="17" y2="21"/>
+            </svg>
+            <span>Computadores</span>
+          </button>
+
+          <button class="nav-item" data-tab="transfers">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              <line x1="12" y1="11" x2="12" y2="17"/>
+              <polyline points="9 14 12 11 15 14"/>
+            </svg>
+            <span>Transferências</span>
+          </button>
+
+          <button class="nav-item" data-tab="chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>Chat</span>
+          </button>
+
+          <button class="nav-item" data-tab="settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Configurações</span>
+          </button>
+
+          <button class="nav-item" data-tab="about">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span>Sobre</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="connection-status-pill">
+            <span class="status-dot-green"></span>
+            <span id="sidebar-status-text">Online</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Workspace -->
+      <main class="main-panel">
+        <!-- Background watermark logo -->
+        <div class="watermark-logo">
+          <svg viewBox="0 0 100 100" width="380" height="380">
+            <path d="M22 14 H60 C78 14, 88 25, 88 40 C88 52, 79 61, 64 64 L86 92 H66 L48 68 H38 V92 H22 Z" fill="#00C2FF" opacity="0.04"/>
+            <polygon points="70,62 94,88 84,89 80,98 72,94 76,85 64,84" fill="#00C2FF" opacity="0.06"/>
+          </svg>
+        </div>
+
+        <!-- TAB: INÍCIO (Exact layout from the image) -->
+        <div id="tab-home" class="tab-content active">
+          <div class="workspace-grid">
+            <!-- Card 1: Meu ID -->
+            <div class="remotex-card host-card">
+              <div class="card-section">
+                <div class="field-label-row">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2FF" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <line x1="8" x2="16" y1="21" y2="21"/>
+                    <line x1="12" x2="12" y1="17" y2="21"/>
                   </svg>
-                </button>
-              </div>
-            </div>
-
-            <div class="field-group">
-              <label for="my-password">Senha Temporária</label>
-              <div class="password-display-container">
-                <input type="text" id="my-password" class="input-password" value="......" readonly />
-                <button id="btn-refresh-password" class="btn-icon" title="Gerar Nova Senha Temporária">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                    <path d="M21 3v5h-5"/>
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                    <path d="M8 16H3v5"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Unattended Access Section -->
-            <div class="unattended-section">
-              <div class="unattended-header">
-                <div>
-                  <span class="unattended-title">Acesso Não Supervisionado</span>
-                  <p class="unattended-desc">Permitir conexão com senha permanente</p>
+                  <span>Meu ID</span>
                 </div>
-                <label class="switch">
-                  <input type="checkbox" id="unattended-toggle">
-                  <span class="slider round"></span>
-                </label>
+                <div class="id-row">
+                  <span id="my-device-id" class="id-text">Carregando...</span>
+                  <button id="btn-copy-id" class="icon-action-btn" title="Copiar ID">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
 
-              <div id="unattended-settings" class="unattended-body hidden">
-                <div class="field-group">
-                  <label for="unattended-password">Senha Permanente</label>
-                  <div class="password-display-container">
-                    <input type="password" id="unattended-password" class="input-text" placeholder="Definir senha permanente segura" />
-                    <button id="btn-save-unattended" class="btn btn-secondary" style="padding: 8px 12px; font-size: 13px;">Salvar</button>
+              <div class="card-section">
+                <div class="field-label-row">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2FF" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  <span>Senha Temporária</span>
+                </div>
+                <div class="id-row">
+                  <span id="my-password-display" class="id-text password-text">7F3K-9Q2M</span>
+                  <button id="btn-refresh-password" class="icon-action-btn" title="Nova Senha">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="23 4 23 10 17 10"/>
+                      <polyline points="1 20 1 14 7 14"/>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="status-banner-ready">
+                <span class="status-dot-green"></span>
+                <span id="host-status-badge">Online – Pronto para conectar</span>
+              </div>
+
+              <div class="host-screen-trigger">
+                <button id="btn-start-host-screen" class="btn-subtle-stream">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span id="host-stream-label">Compartilhar Tela</span>
+                </button>
+              </div>
+
+              <div id="host-active-notice" class="host-notice hidden">
+                <div class="pulse-indicator"></div>
+                <span>Sessão Remota em Andamento. Controle ativo.</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Conectar a um computador -->
+            <div class="remotex-card connect-card">
+              <h3 class="card-heading">Conectar a um computador</h3>
+              
+              <form id="connect-form" onsubmit="return false;" class="connect-form-layout">
+                <div class="input-connect-wrapper">
+                  <input type="text" id="remote-device-id" class="input-remotex" placeholder="Digite o ID Remoto..." maxlength="11" required autocomplete="off" />
+                </div>
+
+                <div class="input-connect-wrapper password-input-row">
+                  <input type="password" id="remote-password" class="input-remotex input-password-sm" placeholder="Senha temporária ou permanente" required autocomplete="off" />
+                </div>
+
+                <button type="submit" id="btn-connect" class="btn-primary-blue">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <line x1="20" y1="7" x2="4" y2="7"/>
+                    <polyline points="10 11 4 7 10 3"/>
+                    <line x1="4" y1="17" x2="20" y2="17"/>
+                    <polyline points="14 13 20 17 14 21"/>
+                  </svg>
+                  <span>Conectar</span>
+                </button>
+
+                <div id="connect-error" class="error-banner hidden"></div>
+              </form>
+
+              <!-- Computadores Recentes (Matching image) -->
+              <div class="recents-block">
+                <div class="recents-header">
+                  <span class="recents-title">Computadores Recentes</span>
+                  <a href="#" id="link-view-all" class="link-view-all">Ver todos →</a>
+                </div>
+
+                <div class="recents-list" id="recent-devices-list">
+                  <div class="recent-row" data-id="123 456 789">
+                    <div class="recent-left">
+                      <span class="os-icon win-icon">⊞</span>
+                      <span class="recent-name">Escritório - SP</span>
+                    </div>
+                    <span class="status-dot-green"></span>
+                  </div>
+
+                  <div class="recent-row" data-id="982 763 325">
+                    <div class="recent-left">
+                      <span class="os-icon lap-icon">💻</span>
+                      <span class="recent-name">Notebook da Família</span>
+                    </div>
+                    <span class="status-dot-green"></span>
+                  </div>
+
+                  <div class="recent-row" data-id="442 819 001">
+                    <div class="recent-left">
+                      <span class="os-icon srv-icon">🖥️</span>
+                      <span class="recent-name">Servidor Principal</span>
+                    </div>
+                    <span class="status-dot-green"></span>
                   </div>
                 </div>
-                <div id="unattended-saved-pill" class="unattended-status-pill hidden">
-                  <span>✓ Senha permanente configurada e ativa</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: COMPUTADORES (Unattended & Saved Devices) -->
+        <div id="tab-computers" class="tab-content">
+          <div class="tab-header-box">
+            <h2>Gerenciamento de Dispositivos</h2>
+            <p>Configure dispositivos salvos e o acesso não supervisionado</p>
+          </div>
+          <div class="unattended-card">
+            <div class="unattended-header">
+              <div>
+                <h3>Acesso Não Supervisionado</h3>
+                <p>Permitir que este computador receba conexões sem confirmação manual</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="unattended-toggle">
+                <span class="slider round"></span>
+              </label>
+            </div>
+            <div id="unattended-settings" class="unattended-body hidden">
+              <div class="field-group">
+                <label for="unattended-password">Senha Permanente Segura</label>
+                <div class="password-display-container">
+                  <input type="password" id="unattended-password" class="input-remotex" placeholder="Definir senha permanente" />
+                  <button id="btn-save-unattended" class="btn-primary-blue" style="padding: 10px 18px;">Salvar Senha</button>
                 </div>
               </div>
-            </div>
-
-            <div class="host-actions">
-              <button id="btn-start-host-screen" class="btn btn-secondary btn-full">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polygon points="10 8 16 12 10 16 10 8"/>
-                </svg>
-                <span id="host-stream-label">Pronto para Conexões</span>
-              </button>
-            </div>
-
-            <div id="host-active-notice" class="host-notice hidden">
-              <div class="pulse-indicator"></div>
-              <span>Sessão Remota em Andamento. Entrada sendo controlada.</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 2: Outro Computador (Client / Viewer) -->
-        <div class="card card-client">
-          <div class="card-header">
-            <div class="card-title-icon client-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 3h6v6"/>
-                <path d="M10 14 21 3"/>
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              </svg>
-            </div>
-            <div>
-              <h2>Controlar Outro Computador</h2>
-              <p class="subtitle">Insira o ID e senha temporária ou permanente</p>
-            </div>
-          </div>
-
-          <div class="card-body">
-            <form id="connect-form" onsubmit="return false;">
-              <div class="field-group">
-                <label for="remote-device-id">ID Remoto</label>
-                <input type="text" id="remote-device-id" class="input-text code-id" placeholder="000 000 000" maxlength="11" required />
-              </div>
-
-              <div class="field-group">
-                <label for="remote-password">Senha de Acesso</label>
-                <input type="password" id="remote-password" class="input-text" placeholder="Senha temporária ou permanente" required />
-              </div>
-
-              <div class="form-actions">
-                <button type="submit" id="btn-connect" class="btn btn-primary btn-full">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                    <polyline points="12 5 19 12 12 19"/>
-                  </svg>
-                  <span>Conectar Agora</span>
-                </button>
-              </div>
-
-              <div id="connect-error" class="error-banner hidden"></div>
-            </form>
-
-            <!-- Dispositivos Recentes -->
-            <div class="recent-list-container">
-              <span class="recent-title">Computadores Recentes</span>
-              <div id="recent-devices-list" class="recent-items">
-                <div class="recent-empty">Nenhuma conexão recente ainda.</div>
+              <div id="unattended-saved-pill" class="unattended-status-pill hidden">
+                <span>✓ Acesso permanente habilitado e protegido</span>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </main>
+
+        <!-- TAB: TRANSFERÊNCIAS -->
+        <div id="tab-transfers" class="tab-content">
+          <div class="tab-header-box">
+            <h2>Histórico de Transferências</h2>
+            <p>Arquivos enviados e recebidos nas sessões do RemoteX</p>
+          </div>
+          <div class="transfer-history-card" id="transfer-global-history">
+            <div class="recent-empty">Nenhuma transferência realizada ainda nesta sessão.</div>
+          </div>
+        </div>
+
+        <!-- TAB: CHAT -->
+        <div id="tab-chat" class="tab-content">
+          <div class="tab-header-box">
+            <h2>Mensagens e Conversas</h2>
+            <p>Histórico de comunicação direta entre dispositivos conectados</p>
+          </div>
+          <div class="chat-placeholder-card">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00C2FF" stroke-width="1.5">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <p>O chat é ativado automaticamente durante uma sessão remota ativa.</p>
+          </div>
+        </div>
+
+        <!-- TAB: CONFIGURAÇÕES -->
+        <div id="tab-settings" class="tab-content">
+          <div class="tab-header-box">
+            <h2>Configurações da Plataforma</h2>
+            <p>Ajustes de rede, qualidade de vídeo e segurança</p>
+          </div>
+          <div class="settings-card">
+            <div class="setting-row">
+              <div>
+                <strong>Servidor de Sinalização</strong>
+                <p>Endereço WebSocket do servidor central</p>
+              </div>
+              <input type="text" id="setting-signaling-url" class="input-remotex" value="ws://localhost:8080" style="max-width: 260px;" readonly />
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>Qualidade de Vídeo</strong>
+                <p>Taxa de quadros e compressão adaptativa</p>
+              </div>
+              <select class="input-remotex" style="max-width: 200px;">
+                <option value="auto">Automática (Adaptativa)</option>
+                <option value="high">Alta Definição (60 FPS)</option>
+                <option value="balanced">Equilibrada</option>
+                <option value="low">Econômica (Baixa Latência)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: SOBRE -->
+        <div id="tab-about" class="tab-content">
+          <div class="about-card">
+            <svg class="remotex-logo-svg" viewBox="0 0 100 100" width="70" height="70">
+              <path d="M22 14 H60 C78 14, 88 25, 88 40 C88 52, 79 61, 64 64 L86 92 H66 L48 68 H38 V92 H22 Z" fill="#FFFFFF"/>
+              <path d="M38 30 H58 C66 30, 71 33, 71 40 C71 47, 66 50, 58 50 H38 Z" fill="#0A111F"/>
+              <path d="M12 68 C12 38, 30 20, 54 14 C34 22, 22 40, 22 68 C22 79, 27 85, 34 89 C22 84, 12 77, 12 68 Z" fill="#00C2FF"/>
+              <polygon points="70,62 94,88 84,89 80,98 72,94 76,85 64,84" fill="#00C2FF"/>
+            </svg>
+            <h2>RemoteX®</h2>
+            <p class="tagline">Conecte. Acesse. Resolva.</p>
+            <p class="desc">Plataforma independente de acesso e controle remoto de alta performance com arquitetura WebRTC, criptografia de ponta a ponta e injeção nativa Win32.</p>
+            <div class="about-links">
+              <a href="https://github.com/avlis98/remotex" target="_blank" class="btn-primary-blue" style="text-decoration:none;">Repositório GitHub</a>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
 
     <!-- Active Remote Session Fullscreen Viewer Modal -->
     <div id="session-overlay" class="session-container hidden">
@@ -194,10 +357,14 @@
       <nav class="session-toolbar">
         <div class="toolbar-section toolbar-left">
           <div class="session-brand">
-            <span class="logo-brand">Remote<span class="logo-accent">X</span></span>
+            <svg viewBox="0 0 100 100" width="20" height="20">
+              <path d="M22 14 H60 C78 14, 88 25, 88 40 C88 52, 79 61, 64 64 L86 92 H66 L48 68 H38 V92 H22 Z" fill="#FFFFFF"/>
+              <polygon points="70,62 94,88 84,89 80,98 72,94 76,85 64,84" fill="#00C2FF"/>
+            </svg>
+            <span class="brand-name">Remote<span class="brand-x">X</span></span>
           </div>
           <div class="session-metrics">
-            <span id="session-status-dot" class="metric-dot"></span>
+            <span id="session-status-dot" class="status-dot-green"></span>
             <span id="session-target-name">Conectado a Remoto</span>
             <span class="metric-divider">•</span>
             <span id="metric-ping">-- ms</span>
@@ -210,7 +377,7 @@
           <!-- Monitor switcher -->
           <div class="dropdown-wrapper">
             <button id="btn-monitors" class="toolbar-btn" title="Alternar Monitores">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect width="20" height="14" x="2" y="3" rx="2"/>
                 <line x1="8" x2="16" y1="21" y2="21"/>
                 <line x1="12" x2="12" y1="17" y2="21"/>
@@ -226,7 +393,7 @@
 
           <!-- File transfer toggle -->
           <button id="btn-files" class="toolbar-btn" title="Transferência de Arquivos">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
               <line x1="12" y1="18" x2="12" y2="12"/>
@@ -237,7 +404,7 @@
 
           <!-- Chat toggle -->
           <button id="btn-chat" class="toolbar-btn" title="Abrir Chat Remoto">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
             <span>Chat</span>
@@ -246,7 +413,7 @@
 
           <!-- Clipboard Sync -->
           <button id="btn-sync-clipboard" class="toolbar-btn" title="Sincronizar Área de Transferência">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
               <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
             </svg>
@@ -255,7 +422,7 @@
 
           <!-- Toggle Input -->
           <button id="btn-toggle-input" class="toolbar-btn active" title="Alternar Controle de Teclado e Mouse">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="3" width="20" height="14" rx="2"/>
               <path d="m8 21 8 0"/>
               <path d="m12 17 0 4"/>
@@ -264,20 +431,20 @@
           </button>
 
           <button id="btn-fullscreen" class="toolbar-btn" title="Tela Cheia">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
             </svg>
           </button>
 
           <button id="btn-restart-remote" class="toolbar-btn btn-warning" title="Reiniciar Computador Remoto">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
               <line x1="12" y1="2" x2="12" y2="12"/>
             </svg>
           </button>
 
           <button id="btn-disconnect" class="toolbar-btn btn-danger" title="Desconectar Sessão">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
               <line x1="12" y1="2" x2="12" y2="12"/>
             </svg>
@@ -305,18 +472,18 @@
       <div id="file-modal" class="drawer-modal hidden">
         <div class="drawer-header">
           <div class="drawer-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
             <h3>Gerenciador de Arquivos Remoto</h3>
           </div>
-          <button id="btn-close-files" class="btn-icon">✕</button>
+          <button id="btn-close-files" class="icon-action-btn">✕</button>
         </div>
         <div class="drawer-body">
           <div class="file-upload-zone" id="file-drop-zone">
             <input type="file" id="file-input" style="display:none;" />
-            <button id="btn-select-file" class="btn btn-primary">
+            <button id="btn-select-file" class="btn-primary-blue">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"/>
                 <line x1="5" y1="12" x2="19" y2="12"/>
@@ -339,24 +506,19 @@
       <div id="chat-drawer" class="chat-drawer-container hidden">
         <div class="drawer-header">
           <div class="drawer-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
             <h3>Chat da Sessão</h3>
           </div>
-          <button id="btn-close-chat" class="btn-icon">✕</button>
+          <button id="btn-close-chat" class="icon-action-btn">✕</button>
         </div>
         <div class="chat-messages" id="chat-messages">
-          <div class="chat-system-msg">Sessão criptografada de ponta a ponta. As mensagens são privadas.</div>
+          <div class="chat-system-msg">Sessão criptografada de ponta a ponta.</div>
         </div>
         <div class="chat-input-bar">
           <input type="text" id="chat-input" placeholder="Digite uma mensagem..." />
-          <button id="btn-send-chat" class="btn-icon btn-chat-send" title="Enviar Mensagem">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
+          <button id="btn-send-chat" class="btn-primary-blue" style="padding: 8px 12px;">Enviar</button>
         </div>
       </div>
 
