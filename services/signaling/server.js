@@ -140,11 +140,25 @@ class GlobalMeshClient {
   }
 
   connect() {
+    if (this.connectTimeoutTimer) {
+      clearTimeout(this.connectTimeoutTimer);
+      this.connectTimeoutTimer = null;
+    }
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
     if (this.socket) {
-      try { this.socket.destroy(); } catch (e) {}
+      try {
+        this.socket.removeAllListeners();
+        this.socket.destroy();
+      } catch (e) {}
       this.socket = null;
     }
     this.connected = false;
+    this.activeBroker = null;
+    this.rxBuffer = Buffer.alloc(0); // CRITICAL: Always clear stale buffer bytes on reconnect!
+
     const broker = GLOBAL_BROKERS[this.brokerIndex % GLOBAL_BROKERS.length];
 
     const sock = tls.connect({
@@ -154,7 +168,7 @@ class GlobalMeshClient {
       rejectUnauthorized: false
     }, () => {
       // Send MQTT CONNECT packet (v3.1.1)
-      const clientId = `rx-${NODE_ID.slice(0, 12)}`;
+      const clientId = `rx-${NODE_ID.slice(0, 12)}-${Math.floor(Math.random() * 999)}`;
       const varHeader = Buffer.from([
         0x00, 0x04, 0x4d, 0x51, 0x54, 0x54, // "MQTT"
         0x04, // Protocol level 4 (3.1.1)
@@ -164,10 +178,18 @@ class GlobalMeshClient {
       const payload = encodeMqttString(clientId);
       const body = Buffer.concat([varHeader, payload]);
       const pkt = Buffer.concat([Buffer.from([0x10]), encodeMqttLength(body.length), body]);
-      sock.write(pkt);
+      try { sock.write(pkt); } catch (e) {}
     });
 
     this.socket = sock;
+
+    // If CONNACK does not arrive within 6 seconds, abort and reconnect immediately
+    this.connectTimeoutTimer = setTimeout(() => {
+      if (!this.connected && this.socket === sock) {
+        console.warn(`[GlobalMesh] Timeout ao conectar em ${broker.host}:${broker.port}. Tentando novamente...`);
+        try { sock.destroy(); } catch (e) {}
+      }
+    }, 6000);
 
     sock.on('data', (chunk) => {
       this.rxBuffer = Buffer.concat([this.rxBuffer, chunk]);
@@ -177,11 +199,24 @@ class GlobalMeshClient {
     sock.on('error', () => {});
 
     sock.on('close', () => {
+      if (this.socket !== sock) return;
       this.connected = false;
       this.activeBroker = null;
-      if (this.pingTimer) clearInterval(this.pingTimer);
-      this.brokerIndex = (this.brokerIndex + 1) % GLOBAL_BROKERS.length;
-      setTimeout(() => this.connect(), 2000);
+      if (this.connectTimeoutTimer) {
+        clearTimeout(this.connectTimeoutTimer);
+        this.connectTimeoutTimer = null;
+      }
+      if (this.pingTimer) {
+        clearInterval(this.pingTimer);
+        this.pingTimer = null;
+      }
+      // Prefer primary broker (broker.emqx.io:8883) so all PCs always meet on the same broker; only rotate after 2 consecutive failures
+      this.failCount = (this.failCount || 0) + 1;
+      if (this.failCount >= 2) {
+        this.failCount = 0;
+        this.brokerIndex = (this.brokerIndex + 1) % GLOBAL_BROKERS.length;
+      }
+      setTimeout(() => this.connect(), 1500);
     });
   }
 
@@ -207,6 +242,11 @@ class GlobalMeshClient {
       if (pktType === 2) {
         // CONNACK
         this.connected = true;
+        this.failCount = 0;
+        if (this.connectTimeoutTimer) {
+          clearTimeout(this.connectTimeoutTimer);
+          this.connectTimeoutTimer = null;
+        }
         const broker = GLOBAL_BROKERS[this.brokerIndex % GLOBAL_BROKERS.length];
         this.activeBroker = `${broker.host}:${broker.port}`;
         console.log(`[GlobalMesh] Conectado ao barramento global (${this.activeBroker})`);

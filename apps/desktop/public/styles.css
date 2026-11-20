@@ -917,6 +917,33 @@ body {
   transform: scale(1.1);
 }
 
+.ad-card-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ad-delete-card-btn {
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  color: #FCA5A5;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.ad-delete-card-btn:hover {
+  background: #DC2626;
+  color: #FFFFFF;
+  transform: scale(1.1);
+}
+
 .ad-session-card-bottom {
   background: linear-gradient(0deg, rgba(6, 11, 20, 0.92) 0%, rgba(6, 11, 20, 0.6) 70%, transparent 100%);
   padding: 18px 10px 8px 10px;

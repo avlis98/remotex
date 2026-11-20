@@ -393,6 +393,7 @@
     const authModalRemember = document.getElementById('auth-modal-remember');
     const btnCloseAuthModal = document.getElementById('btn-close-auth-modal');
     const btnCancelAuthModal = document.getElementById('btn-cancel-auth-modal');
+    const btnDeleteAuthModal = document.getElementById('btn-delete-auth-modal');
     const btnSaveOnlyAuthModal = document.getElementById('btn-save-only-auth-modal');
     const btnRequestApprovalModal = document.getElementById('btn-request-approval-modal');
     const btnAddFavoriteDevice = document.getElementById('btn-add-favorite-device');
@@ -405,6 +406,16 @@
     }
     if (btnCloseAuthModal) btnCloseAuthModal.addEventListener('click', closeAuthModal);
     if (btnCancelAuthModal) btnCancelAuthModal.addEventListener('click', closeAuthModal);
+
+    if (btnDeleteAuthModal) {
+      btnDeleteAuthModal.addEventListener('click', () => {
+        const tId = targetIdFormat(authModalDeviceId.value.trim());
+        if (tId) {
+          removeSavedDevice(tId);
+          closeAuthModal();
+        }
+      });
+    }
 
     // Connect without password -> sends approval request to the remote PC ("Aceitar Conexão -> Controle Total")
     if (btnRequestApprovalModal) {
@@ -1400,6 +1411,22 @@
       recents.unshift(cleanId);
       localStorage.setItem('remotex_recents', JSON.stringify(recents));
     }
+    localStorage.setItem('remotex_recents_initialized', 'true');
+    loadRecentDevices(currentFilterMode);
+  }
+
+  function removeSavedDevice(deviceId) {
+    const cleanId = targetIdFormat(deviceId);
+    let recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]').map(targetIdFormat);
+    recents = recents.filter(d => d !== cleanId);
+    localStorage.setItem('remotex_recents', JSON.stringify(recents));
+    localStorage.setItem('remotex_recents_initialized', 'true');
+
+    const map = getSavedDevicesMap();
+    if (map[cleanId]) {
+      delete map[cleanId];
+      localStorage.setItem('remotex_devices_meta', JSON.stringify(map));
+    }
     loadRecentDevices(currentFilterMode);
   }
 
@@ -1409,6 +1436,7 @@
     const authModalDeviceId = document.getElementById('auth-modal-device-id');
     const authModalAlias = document.getElementById('auth-modal-alias');
     const authModalPassword = document.getElementById('auth-modal-password');
+    const btnDeleteAuthModal = document.getElementById('btn-delete-auth-modal');
     if (!authModal) return;
 
     const cleanId = deviceId ? targetIdFormat(deviceId) : '';
@@ -1423,6 +1451,7 @@
     if (authModalDeviceId) authModalDeviceId.value = cleanId;
     if (authModalAlias) authModalAlias.value = alias || meta.alias || '';
     if (authModalPassword) authModalPassword.value = meta.savedPassword || '';
+    if (btnDeleteAuthModal) btnDeleteAuthModal.classList.toggle('hidden', isAddMode || !cleanId);
 
     authModal.classList.remove('hidden');
     setTimeout(() => {
@@ -2156,12 +2185,10 @@
     let recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]').map(targetIdFormat);
     let metaMap = getSavedDevicesMap();
 
-    // Se a lista estiver vazia na primeira execução, cria os 3 cards visuais padrão igual ao layout AnyDesk
-    if (recents.length === 0) {
+    // Se a lista estiver vazia APENAS na primeira execução (nunca se o usuário excluiu os cards)
+    if (recents.length === 0 && localStorage.getItem('remotex_recents_initialized') !== 'true') {
       const defaultCards = [
-        { id: myDeviceId || '167 009 289', alias: 'Este Dispositivo (Local)', favorite: true, wallpaperIdx: 0 },
-        { id: '128 556 343', alias: 'Escritório - SP', favorite: false, wallpaperIdx: 1 },
-        { id: '153 518 927', alias: 'Servidor Principal', favorite: false, wallpaperIdx: 2 }
+        { id: myDeviceId || '167 009 289', alias: 'Este Dispositivo (Local)', favorite: true, wallpaperIdx: 0 }
       ];
       recents = defaultCards.map(d => d.id);
       defaultCards.forEach(d => {
@@ -2169,6 +2196,7 @@
       });
       localStorage.setItem('remotex_recents', JSON.stringify(recents));
       localStorage.setItem('remotex_devices_meta', JSON.stringify(metaMap));
+      localStorage.setItem('remotex_recents_initialized', 'true');
     }
 
     if (filter === 'discovered' && myDeviceId && !recents.includes(myDeviceId)) {
@@ -2213,9 +2241,12 @@
       card.innerHTML = `
         <div class="ad-session-card-top">
           <span class="ad-online-badge" title="Pronto na Rede Global Mesh"></span>
-          <button class="ad-star-btn ${item.favorite ? 'favorited' : ''}" title="${item.favorite ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos'}">
-            ${item.favorite ? '★' : '☆'}
-          </button>
+          <div class="ad-card-top-actions">
+            <button class="ad-star-btn ${item.favorite ? 'favorited' : ''}" title="${item.favorite ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos'}">
+              ${item.favorite ? '★' : '☆'}
+            </button>
+            <button class="ad-delete-card-btn" title="Excluir este ID da lista">✕</button>
+          </div>
         </div>
         <div class="ad-session-card-bottom">
           <div class="ad-session-info">
@@ -2229,7 +2260,7 @@
               <span>${escapeHtml(item.id)}</span>
             </div>
           </div>
-          <button class="ad-card-menu-btn" title="Configurar apelido/senha ou remover">⋮</button>
+          <button class="ad-card-menu-btn" title="Configurar apelido/senha ou excluir">⋮</button>
         </div>
       `;
 
@@ -2239,6 +2270,15 @@
         e.stopPropagation();
         upsertSavedDevice(item.id, { favorite: !item.favorite });
       });
+
+      // Delete ID button (✕)
+      const deleteBtn = card.querySelector('.ad-delete-card-btn');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeSavedDevice(item.id);
+        });
+      }
 
       // Context menu button (⋮) -> opens modal to edit alias/saved password
       const menuBtn = card.querySelector('.ad-card-menu-btn');
