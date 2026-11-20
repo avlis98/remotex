@@ -221,17 +221,203 @@
       });
     }
 
-    // Tab Navigation
-    navItems.forEach(item => {
-      item.addEventListener('click', () => {
-        navItems.forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        const tabTarget = item.getAttribute('data-tab');
-        tabContents.forEach(tab => {
-          tab.classList.toggle('active', tab.id === `tab-${tabTarget}`);
-        });
+    // AnyDesk v8 Layout Navigation & Actions
+    const tabBtnHome = document.getElementById('tab-btn-home');
+    const tabBtnActiveSession = document.getElementById('tab-btn-active-session');
+    const btnNewSessionTab = document.getElementById('btn-new-session-tab');
+    const btnMinimizeSession = document.getElementById('btn-minimize-session');
+    const btnOpenSettings = document.getElementById('btn-open-settings');
+    const btnBackToDashboard = document.getElementById('btn-back-to-dashboard');
+    const btnInvite = document.getElementById('btn-invite');
+    const btnTogglePwdBadge = document.getElementById('btn-toggle-pwd-badge');
+    const btnQuickFiles = document.getElementById('btn-quick-files');
+    const sectionNews = document.getElementById('section-news');
+    const sectionRecents = document.getElementById('section-recents');
+    const sectionSettings = document.getElementById('section-settings');
+    const recentsSectionHeading = document.getElementById('recents-section-heading');
+    const subnavItems = document.querySelectorAll('.ad-subnav-item');
+
+    // View mode toggles (Grid vs List)
+    const btnViewGrid = document.getElementById('btn-view-grid');
+    const btnViewList = document.getElementById('btn-view-list');
+    if (btnViewGrid && btnViewList) {
+      btnViewGrid.addEventListener('click', () => {
+        btnViewGrid.classList.add('active');
+        btnViewList.classList.remove('active');
+        recentDevicesList.classList.remove('list-view');
+      });
+      btnViewList.addEventListener('click', () => {
+        btnViewList.classList.add('active');
+        btnViewGrid.classList.remove('active');
+        recentDevicesList.classList.add('list-view');
+      });
+    }
+
+    function switchMainFilter(filter) {
+      subnavItems.forEach(b => b.classList.toggle('active', b.getAttribute('data-filter') === filter));
+      if (filter === 'settings') {
+        if (sectionNews) sectionNews.classList.add('hidden');
+        if (sectionRecents) sectionRecents.classList.add('hidden');
+        if (sectionSettings) sectionSettings.classList.remove('hidden');
+      } else {
+        if (sectionSettings) sectionSettings.classList.add('hidden');
+        if (sectionNews) sectionNews.classList.toggle('hidden', filter !== 'all');
+        if (sectionRecents) sectionRecents.classList.remove('hidden');
+        if (recentsSectionHeading) {
+          recentsSectionHeading.textContent =
+            filter === 'favorites' ? 'Dispositivos Favoritos' :
+            filter === 'discovered' ? 'Dispositivos Encontrados na Rede' :
+            'Sessões Recentes';
+        }
+        loadRecentDevices(filter);
+      }
+    }
+
+    subnavItems.forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchMainFilter(btn.getAttribute('data-filter'));
       });
     });
+
+    if (btnOpenSettings) {
+      btnOpenSettings.addEventListener('click', () => switchMainFilter('settings'));
+    }
+    if (btnBackToDashboard) {
+      btnBackToDashboard.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchMainFilter('all');
+      });
+    }
+
+    // Top session tabs switching (AnyDesk style: switch between Nova Sessão and Active Session)
+    if (tabBtnHome) {
+      tabBtnHome.addEventListener('click', () => {
+        tabBtnHome.classList.add('active');
+        if (tabBtnActiveSession) tabBtnActiveSession.classList.remove('active');
+        sessionOverlay.classList.add('hidden');
+      });
+    }
+    if (btnNewSessionTab) {
+      btnNewSessionTab.addEventListener('click', () => {
+        if (tabBtnHome) tabBtnHome.click();
+        remoteDeviceIdInput.focus();
+      });
+    }
+    if (tabBtnActiveSession) {
+      tabBtnActiveSession.addEventListener('click', () => {
+        if (activeSessionId) {
+          tabBtnActiveSession.classList.add('active');
+          if (tabBtnHome) tabBtnHome.classList.remove('active');
+          sessionOverlay.classList.remove('hidden');
+        }
+      });
+    }
+    if (btnMinimizeSession) {
+      btnMinimizeSession.addEventListener('click', () => {
+        if (tabBtnHome) tabBtnHome.click();
+      });
+    }
+
+    // Banner and Quick Action Cards links
+    const bannerLinkUnattended = document.getElementById('banner-link-unattended');
+    const bannerLinkShare = document.getElementById('banner-link-share');
+    const linkCardUnattended = document.getElementById('link-card-unattended');
+    const linkCardDiscover = document.getElementById('link-card-discover');
+    const linkCardPreauth = document.getElementById('link-card-preauth');
+    const btnCardAbout = document.getElementById('btn-card-about');
+    const btnClosePromoCard = document.getElementById('btn-close-promo-card');
+
+    if (bannerLinkUnattended) bannerLinkUnattended.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('settings'); });
+    if (linkCardUnattended) linkCardUnattended.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('settings'); });
+    if (btnTogglePwdBadge) btnTogglePwdBadge.addEventListener('click', () => switchMainFilter('settings'));
+    if (bannerLinkShare) bannerLinkShare.addEventListener('click', async (e) => { e.preventDefault(); await ensureHostScreenCapture(); });
+    if (linkCardPreauth) linkCardPreauth.addEventListener('click', async (e) => { e.preventDefault(); await ensureHostScreenCapture(); });
+    if (linkCardDiscover) linkCardDiscover.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('discovered'); });
+    if (btnCardAbout) btnCardAbout.addEventListener('click', () => switchMainFilter('settings'));
+    if (btnClosePromoCard) {
+      btnClosePromoCard.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = document.getElementById('card-news-quality');
+        if (card) card.style.display = 'none';
+      });
+    }
+
+    // Invite button (Copies ID + Temporary Password ready to paste)
+    if (btnInvite) {
+      btnInvite.addEventListener('click', () => {
+        const inviteText = `Conecte-se ao meu computador via RemoteX:\nID: ${myDeviceId}\nSenha: ${myPassword}`;
+        navigator.clipboard.writeText(inviteText).catch(() => {});
+        const span = btnInvite.querySelector('span');
+        const orig = span.textContent;
+        span.textContent = 'Copiado!';
+        setTimeout(() => { span.textContent = orig; }, 1800);
+      });
+    }
+
+    // Clicking myDeviceId copies it too
+    if (myDeviceIdEl) {
+      myDeviceIdEl.addEventListener('click', () => {
+        if (btnCopyId) btnCopyId.click();
+      });
+    }
+
+    if (btnQuickFiles) {
+      btnQuickFiles.addEventListener('click', () => {
+        startRemoteConnection(true);
+      });
+    }
+
+    // Auth Modal Controls
+    const authModal = document.getElementById('auth-modal');
+    const authModalForm = document.getElementById('auth-modal-form');
+    const authModalDeviceId = document.getElementById('auth-modal-device-id');
+    const authModalAlias = document.getElementById('auth-modal-alias');
+    const authModalPassword = document.getElementById('auth-modal-password');
+    const authModalRemember = document.getElementById('auth-modal-remember');
+    const btnCloseAuthModal = document.getElementById('btn-close-auth-modal');
+    const btnCancelAuthModal = document.getElementById('btn-cancel-auth-modal');
+    const btnAddFavoriteDevice = document.getElementById('btn-add-favorite-device');
+
+    function closeAuthModal() {
+      if (authModal) authModal.classList.add('hidden');
+    }
+    if (btnCloseAuthModal) btnCloseAuthModal.addEventListener('click', closeAuthModal);
+    if (btnCancelAuthModal) btnCancelAuthModal.addEventListener('click', closeAuthModal);
+
+    if (authModalDeviceId) {
+      authModalDeviceId.addEventListener('input', (e) => {
+        let v = e.target.value.replace(/\D/g, '').substring(0, 9);
+        if (v.length > 6) v = `${v.substring(0, 3)} ${v.substring(3, 6)} ${v.substring(6, 9)}`;
+        else if (v.length > 3) v = `${v.substring(0, 3)} ${v.substring(3, 6)}`;
+        e.target.value = v;
+      });
+    }
+
+    if (btnAddFavoriteDevice) {
+      btnAddFavoriteDevice.addEventListener('click', (e) => {
+        e.preventDefault();
+        openAuthModal('', '', true);
+      });
+    }
+
+    if (authModalForm) {
+      authModalForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const tId = targetIdFormat(authModalDeviceId.value.trim());
+        const alias = authModalAlias.value.trim();
+        const pwd = authModalPassword.value.trim();
+        if (!tId || tId.replace(/\D/g, '').length < 9 || !pwd) return;
+
+        upsertSavedDevice(tId, {
+          alias: alias || undefined,
+          savedPassword: authModalRemember.checked ? pwd : ''
+        });
+        remoteDeviceIdInput.value = tId;
+        remotePasswordInput.value = pwd;
+        closeAuthModal();
+        startRemoteConnection();
+      });
+    }
 
     // Window controls
     if (winClose) {
@@ -253,17 +439,6 @@
         }
       });
     }
-
-    // Recent items click
-    document.querySelectorAll('.recent-row').forEach(row => {
-      row.addEventListener('click', () => {
-        const id = row.getAttribute('data-id');
-        if (id) {
-          remoteDeviceIdInput.value = id;
-          remotePasswordInput.focus();
-        }
-      });
-    });
 
     // Unattended access restore
     unattendedToggle.checked = unattendedEnabled;
@@ -838,23 +1013,93 @@
     }
   }
 
+  let pendingAutoOpenFiles = false;
+  let currentFilterMode = 'all';
+
+  function getSavedDevicesMap() {
+    try {
+      return JSON.parse(localStorage.getItem('remotex_devices_meta') || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function upsertSavedDevice(deviceId, updates) {
+    const cleanId = targetIdFormat(deviceId);
+    const map = getSavedDevicesMap();
+    const existing = map[cleanId] || {
+      id: cleanId,
+      alias: '',
+      favorite: false,
+      savedPassword: '',
+      thumbnail: null,
+      wallpaperIdx: Math.abs(cleanId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 4
+    };
+    map[cleanId] = { ...existing, ...updates, id: cleanId };
+    localStorage.setItem('remotex_devices_meta', JSON.stringify(map));
+
+    let recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]');
+    if (!recents.includes(cleanId)) {
+      recents.unshift(cleanId);
+      localStorage.setItem('remotex_recents', JSON.stringify(recents));
+    }
+    loadRecentDevices(currentFilterMode);
+  }
+
+  function openAuthModal(deviceId, alias = '', isAddMode = false) {
+    const authModal = document.getElementById('auth-modal');
+    const authModalTitle = document.getElementById('auth-modal-title');
+    const authModalDeviceId = document.getElementById('auth-modal-device-id');
+    const authModalAlias = document.getElementById('auth-modal-alias');
+    const authModalPassword = document.getElementById('auth-modal-password');
+    if (!authModal) return;
+
+    const cleanId = deviceId ? targetIdFormat(deviceId) : '';
+    const map = getSavedDevicesMap();
+    const meta = map[cleanId] || {};
+
+    if (authModalTitle) {
+      authModalTitle.textContent = isAddMode
+        ? 'Adicionar / Conectar Computador'
+        : `Conectar a ${meta.alias ? meta.alias + ' (' + cleanId + ')' : cleanId}`;
+    }
+    if (authModalDeviceId) authModalDeviceId.value = cleanId;
+    if (authModalAlias) authModalAlias.value = alias || meta.alias || '';
+    if (authModalPassword) authModalPassword.value = meta.savedPassword || '';
+
+    authModal.classList.remove('hidden');
+    setTimeout(() => {
+      if (!cleanId && authModalDeviceId) authModalDeviceId.focus();
+      else if (authModalPassword) authModalPassword.focus();
+    }, 60);
+  }
+
   // Client/Viewer Mode: Initiate connection to target
-  function startRemoteConnection() {
+  function startRemoteConnection(openFilesAfterConnect = false) {
     clearConnectError();
-    const targetId = remoteDeviceIdInput.value.trim();
-    const password = remotePasswordInput.value.trim();
+    const targetId = targetIdFormat(remoteDeviceIdInput.value.trim());
+    let password = remotePasswordInput.value.trim();
 
-    if (!targetId || targetId.length < 9) {
-      showConnectError('Insira um ID de acesso válido (9 dígitos).');
+    if (!targetId || targetId.replace(/\D/g, '').length < 9) {
+      showConnectError('Insira um endereço remoto válido (9 dígitos).');
+      remoteDeviceIdInput.focus();
       return;
     }
+
+    // Check if we have a saved password for this device
     if (!password) {
-      showConnectError('Insira a senha de acesso.');
-      return;
+      const map = getSavedDevicesMap();
+      if (map[targetId] && map[targetId].savedPassword) {
+        password = map[targetId].savedPassword;
+        remotePasswordInput.value = password;
+      } else {
+        openAuthModal(targetId);
+        return;
+      }
     }
 
+    pendingAutoOpenFiles = !!openFilesAfterConnect;
     btnConnect.disabled = true;
-    btnConnect.querySelector('span').textContent = 'Conectando...';
 
     signalingWs.send(JSON.stringify({
       type: 'connect_request',
@@ -862,6 +1107,19 @@
       password: password,
       clientInfo: { hostname: 'RemoteX Controller' }
     }));
+  }
+
+  function captureVideoThumbnail(targetDeviceId) {
+    try {
+      if (!remoteVideo || !remoteVideo.videoWidth || !remoteVideo.videoHeight) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 180;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(remoteVideo, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+      upsertSavedDevice(targetDeviceId, { thumbnail: dataUrl });
+    } catch (e) {}
   }
 
   async function setupClientPeerConnection(targetDeviceId, iceServers) {
@@ -901,6 +1159,13 @@
     // 3. Data Channel: File Transfer
     fileDataChannel = pc.createDataChannel('remotex-files', { ordered: true });
     setupFileChannelListener(fileDataChannel);
+    fileDataChannel.onopen = () => {
+      if (pendingAutoOpenFiles) {
+        pendingAutoOpenFiles = false;
+        isFilesOpen = true;
+        fileModal.classList.remove('hidden');
+      }
+    };
 
     // Receive remote video stream
     pc.ontrack = (event) => {
@@ -913,6 +1178,7 @@
       
       event.track.onloadedmetadata = () => {
         metricResolution.textContent = `${remoteVideo.videoWidth}x${remoteVideo.videoHeight}`;
+        setTimeout(() => captureVideoThumbnail(targetDeviceId), 1200);
       };
     };
 
@@ -941,8 +1207,20 @@
       targetDeviceId
     }));
 
+    // Activate AnyDesk-style Top Session Tab
+    const formattedTarget = targetIdFormat(targetDeviceId);
+    const tabBtnHome = document.getElementById('tab-btn-home');
+    const tabBtnActiveSession = document.getElementById('tab-btn-active-session');
+    const tabActiveSessionLabel = document.getElementById('tab-active-session-label');
+    if (tabBtnActiveSession) {
+      tabBtnActiveSession.classList.remove('hidden');
+      tabBtnActiveSession.classList.add('active');
+    }
+    if (tabBtnHome) tabBtnHome.classList.remove('active');
+    if (tabActiveSessionLabel) tabActiveSessionLabel.textContent = formattedTarget;
+
     // Open session UI overlay
-    sessionTargetName.textContent = `Computador Remoto: ${targetIdFormat(targetDeviceId)}`;
+    sessionTargetName.textContent = `Computador Remoto: ${formattedTarget}`;
     sessionOverlay.classList.remove('hidden');
     videoLoader.classList.remove('hidden');
     resetConnectButton();
@@ -1357,6 +1635,13 @@
     fileModal.classList.add('hidden');
     chatDrawer.classList.add('hidden');
     remoteVideo.srcObject = null;
+    const tabBtnHome = document.getElementById('tab-btn-home');
+    const tabBtnActiveSession = document.getElementById('tab-btn-active-session');
+    if (tabBtnActiveSession) {
+      tabBtnActiveSession.classList.add('hidden');
+      tabBtnActiveSession.classList.remove('active');
+    }
+    if (tabBtnHome) tabBtnHome.classList.add('active');
     resetConnectButton();
   }
 
@@ -1364,6 +1649,9 @@
   function showConnectError(msg) {
     connectErrorEl.textContent = msg;
     connectErrorEl.classList.remove('hidden');
+    setTimeout(() => {
+      connectErrorEl.classList.add('hidden');
+    }, 6000);
   }
 
   function clearConnectError() {
@@ -1373,45 +1661,125 @@
 
   function resetConnectButton() {
     btnConnect.disabled = false;
-    btnConnect.querySelector('span').textContent = 'Conectar Agora';
   }
 
   function targetIdFormat(id) {
-    const clean = String(id).replace(/\s/g, '');
+    const clean = String(id).replace(/\D/g, '');
     if (clean.length === 9) {
       return `${clean.substring(0, 3)} ${clean.substring(3, 6)} ${clean.substring(6, 9)}`;
     }
-    return id;
+    return String(id).trim();
   }
 
   function saveRecentDevice(deviceId) {
+    const clean = targetIdFormat(deviceId);
     let recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]');
-    recents = recents.filter(d => d !== deviceId);
-    recents.unshift(deviceId);
-    if (recents.length > 5) recents.pop();
+    recents = recents.filter(d => targetIdFormat(d) !== clean);
+    recents.unshift(clean);
+    if (recents.length > 12) recents.pop();
     localStorage.setItem('remotex_recents', JSON.stringify(recents));
-    loadRecentDevices();
+    const enteredPwd = remotePasswordInput.value.trim();
+    if (enteredPwd) {
+      upsertSavedDevice(clean, { savedPassword: enteredPwd });
+    } else {
+      loadRecentDevices(currentFilterMode);
+    }
   }
 
-  function loadRecentDevices() {
-    const recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]');
+  function loadRecentDevices(filter = 'all') {
+    currentFilterMode = filter;
+    let recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]').map(targetIdFormat);
+    const metaMap = getSavedDevicesMap();
+
+    // If completely empty on first install, include the current device in Discovered
+    if (filter === 'discovered' && myDeviceId && !recents.includes(myDeviceId)) {
+      recents = [myDeviceId, ...recents];
+    }
+
+    let list = recents.map((id, idx) => {
+      const m = metaMap[id] || {};
+      return {
+        id,
+        alias: m.alias || (id === myDeviceId ? 'Este Dispositivo (Local)' : ''),
+        favorite: !!m.favorite,
+        savedPassword: m.savedPassword || '',
+        thumbnail: m.thumbnail || null,
+        wallpaperIdx: m.wallpaperIdx !== undefined ? m.wallpaperIdx : (idx % 4)
+      };
+    });
+
+    if (filter === 'favorites') {
+      list = list.filter(d => d.favorite);
+    }
+
     recentDevicesList.innerHTML = '';
-    if (recents.length === 0) {
-      recentDevicesList.innerHTML = '<div class="recent-empty">Nenhuma conexão recente ainda.</div>';
+    if (list.length === 0) {
+      recentDevicesList.innerHTML = `
+        <div class="recent-empty">
+          ${filter === 'favorites'
+            ? 'Nenhum computador marcado como favorito (clique na estrela ☆ em uma sessão recente ou em "+ Adicionar Computador").'
+            : 'Nenhuma sessão recente registrada ainda. Digite um ID remoto na barra superior ou clique em "+ Adicionar Computador".'}
+        </div>
+      `;
       return;
     }
-    recents.forEach(id => {
-      const item = document.createElement('div');
-      item.className = 'recent-item';
-      item.innerHTML = `
-        <span class="recent-id">${targetIdFormat(id)}</span>
-        <button class="btn-icon" title="Usar este ID">➔</button>
+
+    list.forEach((item) => {
+      const card = document.createElement('div');
+      card.className = `ad-session-card ad-wallpaper-${item.wallpaperIdx}`;
+      if (item.thumbnail) {
+        card.style.backgroundImage = `url("${item.thumbnail}")`;
+      }
+
+      card.innerHTML = `
+        <div class="ad-session-card-top">
+          <span class="ad-online-badge" title="Pronto na Rede Global Mesh"></span>
+          <button class="ad-star-btn ${item.favorite ? 'favorited' : ''}" title="${item.favorite ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos'}">
+            ${item.favorite ? '★' : '☆'}
+          </button>
+        </div>
+        <div class="ad-session-card-bottom">
+          <div class="ad-session-info">
+            ${item.alias ? `<span class="ad-session-alias">${escapeHtml(item.alias)}</span>` : ''}
+            <div class="ad-session-id-row">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C2FF" stroke-width="2.2">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <span>${escapeHtml(item.id)}</span>
+            </div>
+          </div>
+          <button class="ad-card-menu-btn" title="Configurar apelido/senha ou remover">⋮</button>
+        </div>
       `;
-      item.addEventListener('click', () => {
-        remoteDeviceIdInput.value = targetIdFormat(id);
-        remotePasswordInput.focus();
+
+      // Toggle Favorite star
+      const starBtn = card.querySelector('.ad-star-btn');
+      starBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        upsertSavedDevice(item.id, { favorite: !item.favorite });
       });
-      recentDevicesList.appendChild(item);
+
+      // Context menu button (⋮) -> opens modal to edit alias/saved password
+      const menuBtn = card.querySelector('.ad-card-menu-btn');
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAuthModal(item.id, item.alias, false);
+      });
+
+      // Clicking card connects (1-click if saved password exists, otherwise opens AnyDesk password modal)
+      card.addEventListener('click', () => {
+        remoteDeviceIdInput.value = item.id;
+        if (item.savedPassword) {
+          remotePasswordInput.value = item.savedPassword;
+          startRemoteConnection();
+        } else {
+          openAuthModal(item.id, item.alias, false);
+        }
+      });
+
+      recentDevicesList.appendChild(card);
     });
   }
 

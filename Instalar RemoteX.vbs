@@ -1,5 +1,7 @@
-Set WshShell = CreateObject("WScript.Shell")
+Set objShell = CreateObject("Shell.Application")
 Set fso = CreateObject("Scripting.FileSystemObject")
+
 currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
-WshShell.CurrentDirectory = currentDir
-WshShell.Run """" & currentDir & "\Instalar RemoteX.exe""", 1, False
+psScript = currentDir & "\setup_wizard.ps1"
+
+objShell.ShellExecute "powershell.exe", "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & psScript & """", "", "runas", 0

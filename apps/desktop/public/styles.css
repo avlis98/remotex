@@ -1,22 +1,22 @@
 :root {
   --bg-window: #070D18;
-  --bg-sidebar: #09101E;
+  --bg-tabbar: #060B14;
+  --bg-omnibar: #0A1322;
   --bg-main: #0B1424;
-  --bg-card: #0E1A2D;
-  --bg-card-hover: #13223A;
-  
-  --border-subtle: rgba(0, 194, 255, 0.12);
+  --bg-card: #0F1C30;
+  --bg-card-hover: #152642;
+
+  --border-subtle: rgba(0, 194, 255, 0.14);
   --border-focus: #00C2FF;
-  
+
   --brand-blue: #0070F3;
   --brand-cyan: #00C2FF;
   --brand-accent-glow: rgba(0, 194, 255, 0.35);
 
-  --btn-blue: linear-gradient(135deg, #0066FF 0%, #0099FF 100%);
-  --btn-blue-hover: linear-gradient(135deg, #1A75FF 0%, #33ADFF 100%);
+  --btn-blue: linear-gradient(135deg, #0066FF 0%, #00B2FF 100%);
+  --btn-blue-hover: linear-gradient(135deg, #1A75FF 0%, #33C4FF 100%);
 
   --status-green: #10B981;
-  --status-green-glow: rgba(16, 185, 129, 0.4);
   --status-warning: #F59E0B;
   --status-danger: #EF4444;
 
@@ -41,57 +41,156 @@ body {
   background-color: var(--bg-window);
   color: var(--text-primary);
   min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   overflow: hidden;
 }
 
-/* Window Frame (Simulating native app window matching image) */
+.sr-only {
+  display: none;
+}
+
+.text-cyan {
+  color: var(--brand-cyan);
+}
+
 .window-frame {
   width: 100vw;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-main);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+  background: radial-gradient(circle at 50% 15%, #10213C 0%, #08111F 70%);
   overflow: hidden;
 }
 
-/* Window Titlebar */
-.window-titlebar {
+/* ============================================================================
+   1. TOP TAB BAR (AnyDesk v8 Tabbed Header with RemoteX Identity)
+   ============================================================================ */
+.ad-tabbar {
   height: 38px;
-  background-color: var(--bg-sidebar);
+  background-color: var(--bg-tabbar);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
+  padding: 0 10px;
   user-select: none;
 }
 
-.titlebar-left {
+.ad-tabbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+}
+
+.ad-brand-pill {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 8px;
 }
 
-.titlebar-title {
-  font-size: 13px;
-  font-weight: 600;
+.ad-brand-icon {
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 194, 255, 0.45);
+}
+
+.ad-brand-text {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-white);
+  letter-spacing: -0.3px;
+}
+
+.brand-x {
+  color: var(--brand-cyan);
+}
+
+.ad-session-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 100%;
+  padding-top: 5px;
+}
+
+.ad-tab {
+  height: 32px;
+  padding: 0 16px;
+  background-color: rgba(15, 28, 48, 0.55);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ad-tab:hover {
+  background-color: rgba(21, 38, 66, 0.8);
+  color: var(--text-white);
+}
+
+.ad-tab.active {
+  background-color: var(--bg-omnibar);
+  border-color: var(--border-subtle);
+  color: var(--brand-cyan);
+  box-shadow: 0 -2px 10px rgba(0, 194, 255, 0.12);
+}
+
+.ad-tab-new {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ad-tab-new:hover {
+  background-color: rgba(0, 194, 255, 0.12);
+  color: var(--brand-cyan);
+}
+
+.ad-tabbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ad-mesh-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #34D399;
 }
 
 .titlebar-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .win-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   width: 28px;
   height: 24px;
   border-radius: 4px;
@@ -104,7 +203,7 @@ body {
 }
 
 .win-btn:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.1);
   color: var(--text-white);
 }
 
@@ -113,197 +212,900 @@ body {
   color: #fff;
 }
 
-/* App Layout */
-.app-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-/* Left Sidebar */
-.sidebar {
-  width: 190px;
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  padding: 14px 10px;
-  user-select: none;
-}
-
-.sidebar-brand {
-  padding: 0 6px 18px 6px;
-}
-
-.brand-logo-combo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.brand-name {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: var(--text-white);
-}
-
-.brand-x {
-  color: var(--brand-cyan);
-}
-
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: left;
-}
-
-.nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
-  color: var(--text-white);
-}
-
-.nav-item.active {
-  background: linear-gradient(90deg, #0070F3 0%, #0099FF 100%);
-  color: #FFFFFF;
-  font-weight: 600;
-  box-shadow: 0 4px 15px rgba(0, 112, 243, 0.4);
-}
-
-.sidebar-footer {
-  padding-top: 10px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.connection-status-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
 .status-dot-green {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background-color: var(--status-green);
   box-shadow: 0 0 8px var(--status-green);
+  display: inline-block;
 }
 
-/* Main Panel */
-.main-panel {
+/* ============================================================================
+   2. ANYDESK-STYLE OMNIBOX / ADDRESS BAR
+   ============================================================================ */
+.ad-omnibar-row {
+  height: 52px;
+  background-color: var(--bg-omnibar);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.ad-status-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10B981, #059669);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ad-omnibox-form {
   flex: 1;
-  position: relative;
-  background: radial-gradient(circle at 75% 25%, #0F1F38 0%, #081120 70%);
+  height: 36px;
+  background-color: #070E1B;
+  border: 1px solid rgba(0, 194, 255, 0.25);
+  border-radius: 18px;
   display: flex;
-  flex-direction: column;
-  padding: 22px 28px;
-  overflow-y: auto;
+  align-items: center;
+  padding: 0 6px 0 14px;
+  transition: all 0.2s ease;
 }
 
-.watermark-logo {
-  position: absolute;
-  bottom: -30px;
-  right: 10%;
-  pointer-events: none;
-  z-index: 1;
+.ad-omnibox-form:focus-within {
+  border-color: var(--brand-cyan);
+  box-shadow: 0 0 14px rgba(0, 194, 255, 0.28);
 }
 
-.tab-content {
-  display: none;
-  position: relative;
-  z-index: 2;
-  width: 100%;
+.ad-omnibox-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-white);
+  font-family: var(--font-main);
+  font-size: 13.5px;
+  font-weight: 500;
 }
 
-.tab-content.active {
-  display: block;
+.ad-omnibox-input::placeholder {
+  color: var(--text-muted);
 }
 
-/* Workspace Grid (Matching compact TeamViewer presentation) */
-.workspace-grid {
-  display: grid;
-  grid-template-columns: 290px 380px;
-  gap: 20px;
-  align-items: start;
+.ad-omnibox-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-subtle);
+  margin: 0 10px;
 }
 
-/* Cards */
-.remotex-card {
-  background: rgba(14, 26, 45, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 18px 20px;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
-  position: relative;
-  overflow: hidden;
-  transition: border-color 0.2s ease;
+.ad-omnibox-password {
+  width: 195px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--brand-cyan);
+  font-family: var(--font-main);
+  font-size: 12.5px;
 }
 
-.remotex-card:hover {
-  border-color: rgba(0, 194, 255, 0.3);
+.ad-omnibox-password::placeholder {
+  color: var(--text-muted);
 }
 
-/* Card 1: Host Meu ID */
-.host-card {
+.ad-omnibox-icon-btn,
+.ad-omnibox-connect-btn {
+  width: 30px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 14px;
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.card-section {
+.ad-omnibox-icon-btn:hover {
+  color: var(--brand-cyan);
+  background-color: rgba(0, 194, 255, 0.1);
+}
+
+.ad-omnibox-connect-btn {
+  color: var(--brand-cyan);
+}
+
+.ad-omnibox-connect-btn:hover {
+  background: var(--btn-blue);
+  color: #FFFFFF;
+}
+
+.ad-hamburger-btn {
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.field-label-row {
+.ad-hamburger-btn:hover {
+  background-color: rgba(0, 194, 255, 0.1);
+  border-color: var(--border-subtle);
+  color: var(--brand-cyan);
+}
+
+/* ============================================================================
+   3. REMOTEX INFO STRIP (Top Banner Strip in RemoteX Blue/Cyan Gradient)
+   ============================================================================ */
+.ad-banner-strip {
+  height: 30px;
+  background: linear-gradient(90deg, #0052D4 0%, #0070F3 50%, #00A8FF 100%);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 16px;
+  box-shadow: 0 3px 12px rgba(0, 112, 243, 0.3);
+}
+
+.ad-banner-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  font-weight: 500;
+}
+
+.ad-banner-actions a {
+  color: #E0F2FE;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ad-banner-actions a:hover {
+  color: #FFFFFF;
+}
+
+.ad-error-toast {
+  background-color: rgba(239, 68, 68, 0.18);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.45);
+  color: #FCA5A5;
+  text-align: center;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ============================================================================
+   4. MAIN WORKSPACE & "ESTE DISPOSITIVO" HERO
+   ============================================================================ */
+.ad-main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 36px 32px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ad-this-device-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 4px 0;
+}
+
+.ad-hero-main-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ad-this-device-label {
+  font-size: 19px;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
-.id-row {
+.ad-this-device-id {
+  font-family: var(--font-main);
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--brand-cyan);
+  letter-spacing: 1px;
+  text-shadow: 0 0 24px rgba(0, 194, 255, 0.35);
+  cursor: pointer;
+  user-select: all;
+  transition: transform 0.15s ease;
+}
+
+.ad-this-device-id:hover {
+  transform: scale(1.02);
+  color: #38D2FF;
+}
+
+.ad-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+}
+
+.ad-hero-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(15, 28, 48, 0.7);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ad-hero-icon-btn:hover {
+  color: var(--brand-cyan);
+  border-color: var(--brand-cyan);
+  background-color: rgba(0, 194, 255, 0.12);
+}
+
+.ad-invite-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1.5px solid var(--brand-cyan);
+  color: var(--brand-cyan);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ad-invite-btn:hover {
+  background: var(--btn-blue);
+  border-color: transparent;
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(0, 194, 255, 0.35);
+}
+
+.ad-hero-subbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.ad-pwd-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(14, 26, 45, 0.85);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.ad-pwd-label {
+  color: var(--text-secondary);
+}
+
+.ad-pwd-value {
+  font-family: var(--font-mono);
+  color: var(--text-white);
+  font-size: 13px;
+  letter-spacing: 0.8px;
+}
+
+.ad-mini-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.ad-mini-icon-btn:hover {
+  color: var(--brand-cyan);
+}
+
+.ad-share-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(0, 194, 255, 0.1);
+  border: 1px solid rgba(0, 194, 255, 0.25);
+  color: var(--brand-cyan);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ad-share-pill:hover,
+.ad-share-pill.active {
+  background-color: rgba(16, 185, 129, 0.18);
+  border-color: #10B981;
+  color: #34D399;
+}
+
+/* ============================================================================
+   5. SUBNAV BAR (News | Favoritos | Sessões Recentes | Encontrados)
+   ============================================================================ */
+.ad-subnav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.ad-subnav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.ad-subnav-item {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.ad-subnav-item:hover {
+  color: var(--text-white);
+}
+
+.ad-subnav-item.active {
+  color: var(--brand-cyan);
+}
+
+.ad-subnav-item.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -9px;
+  height: 2px;
+  background: var(--brand-cyan);
+  box-shadow: 0 0 8px var(--brand-cyan);
+}
+
+.ad-view-toggles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ad-view-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ad-view-btn.active,
+.ad-view-btn:hover {
+  color: var(--brand-cyan);
+  background-color: rgba(0, 194, 255, 0.1);
+  border-color: var(--border-subtle);
+}
+
+/* ============================================================================
+   6. NEWS / QUICK ACTION 4-CARD GRID (AnyDesk v8 Cards in RemoteX Palette)
+   ============================================================================ */
+.ad-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ad-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+}
+
+.ad-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.ad-section-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-cyan);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ad-section-link:hover {
+  color: #FFFFFF;
+}
+
+.ad-news-grid {
+  display: grid;
+  grid-template-columns: 185px 185px 185px 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 960px) {
+  .ad-news-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.ad-news-card {
+  height: 150px;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.ad-news-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* Card 1: Dark Tech */
+.ad-card-dark {
+  background: linear-gradient(145deg, #070C16 0%, #0F203C 100%);
+  border: 1px solid rgba(0, 194, 255, 0.3);
+}
+
+.ad-card-watermark {
+  position: absolute;
+  right: -6px;
+  bottom: -18px;
+  font-size: 110px;
+  font-weight: 900;
+  color: rgba(0, 194, 255, 0.14);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.ad-news-card h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+
+.ad-card-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.ad-card-pill-btn {
+  align-self: flex-start;
+  background: var(--btn-blue);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Card 2: Vibrant Cyan/Blue */
+.ad-card-cyan {
+  background: linear-gradient(145deg, #0070F3 0%, #00B2FF 100%);
+  color: #FFFFFF;
+}
+
+.ad-card-bg-icon {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.ad-card-link {
+  font-size: 12px;
+  color: #FFFFFF;
+  text-decoration: underline;
+  line-height: 1.4;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* Card 3: Royal Blue */
+.ad-card-blue {
+  background: linear-gradient(145deg, #1E40AF 0%, #3B82F6 100%);
+  color: #FFFFFF;
+}
+
+.ad-card-blue p {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.35;
+}
+
+.ad-card-footer-link {
+  align-self: flex-end;
+  font-size: 12px;
+  font-weight: 600;
+  color: #FFFFFF;
+  text-decoration: underline;
+}
+
+/* Card 4: Slate Panel */
+.ad-card-slate {
+  background: linear-gradient(145deg, #16243B 0%, #1E3252 100%);
+  border: 1px solid var(--border-subtle);
+}
+
+.ad-card-slate p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ad-card-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ============================================================================
+   7. SESSÕES RECENTES THUMBNAIL CARDS (AnyDesk Wallpaper Cards Grid)
+   ============================================================================ */
+.ad-sessions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  gap: 14px;
+}
+
+.ad-sessions-grid.list-view {
+  grid-template-columns: 1fr;
+}
+
+.ad-session-card {
+  height: 138px;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 194, 255, 0.18);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.18s ease;
+  background-size: cover;
+  background-position: center;
+}
+
+.ad-sessions-grid.list-view .ad-session-card {
+  height: 54px;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.ad-session-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--brand-cyan);
+  box-shadow: 0 12px 28px rgba(0, 194, 255, 0.25);
+}
+
+/* Built-in Scenic/Cyber Wallpaper Presets matching AnyDesk's visual cards */
+.ad-wallpaper-0 {
+  background-image:
+    radial-gradient(circle at 80% 20%, rgba(0, 194, 255, 0.45) 0%, transparent 55%),
+    linear-gradient(135deg, #0B2545 0%, #134074 50%, #00A8E8 100%);
+}
+
+.ad-wallpaper-1 {
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(16, 185, 129, 0.4) 0%, transparent 55%),
+    linear-gradient(135deg, #06283D 0%, #1363DF 55%, #47B5FF 100%);
+}
+
+.ad-wallpaper-2 {
+  background-image:
+    radial-gradient(circle at 75% 70%, rgba(139, 92, 246, 0.45) 0%, transparent 55%),
+    linear-gradient(135deg, #1A1A40 0%, #270082 50%, #00C2FF 100%);
+}
+
+.ad-wallpaper-3 {
+  background-image:
+    radial-gradient(circle at 30% 75%, rgba(0, 194, 255, 0.5) 0%, transparent 60%),
+    linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #0284C7 100%);
+}
+
+.ad-session-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  z-index: 2;
+}
+
+.ad-online-badge {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #10B981;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+
+.ad-star-btn {
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  color: #FFFFFF;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.ad-star-btn.favorited {
+  color: #FBBF24;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.7);
+}
+
+.ad-star-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
+  transform: scale(1.1);
+}
+
+.ad-session-card-bottom {
+  background: linear-gradient(0deg, rgba(6, 11, 20, 0.92) 0%, rgba(6, 11, 20, 0.6) 70%, transparent 100%);
+  padding: 18px 10px 8px 10px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  z-index: 2;
+}
+
+.ad-sessions-grid.list-view .ad-session-card-bottom {
+  background: none;
+  padding: 0;
+  flex: 1;
+  align-items: center;
+  margin-left: 12px;
+}
+
+.ad-session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ad-session-alias {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-cyan);
+}
+
+.ad-session-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.ad-card-menu-btn {
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ad-card-menu-btn:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* ============================================================================
+   8. MODAL & SETTINGS STYLES
+   ============================================================================ */
+.ad-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 18px;
+}
+
+.ad-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(4, 8, 16, 0.78);
+  backdrop-filter: blur(6px);
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ad-modal-card {
+  width: 100%;
+  max-width: 430px;
+  background-color: #0E1A2D;
+  border: 1px solid rgba(0, 194, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+}
+
+.ad-modal-header {
+  padding: 14px 18px;
+  background-color: #091220;
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.id-text {
-  font-family: var(--font-main);
-  font-size: 21px;
+.ad-modal-header h3 {
+  font-size: 15px;
   font-weight: 700;
-  color: var(--text-white);
-  letter-spacing: 0.5px;
+  color: #FFFFFF;
 }
 
-.password-text {
-  font-size: 18px;
-  letter-spacing: 1px;
+.ad-modal-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ad-modal-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.ad-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ad-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Shared Components */
+.input-remotex {
+  width: 100%;
+  background-color: rgba(8, 16, 30, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--text-white);
+  outline: none;
+  font-family: var(--font-main);
+  transition: all 0.2s ease;
+}
+
+.input-remotex:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 12px var(--brand-accent-glow);
+}
+
+.btn-primary-blue {
+  width: 100%;
+  background: var(--btn-blue);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 102, 255, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-primary-blue:hover {
+  background: var(--btn-blue-hover);
+  transform: translateY(-1px);
+}
+
+.btn-subtle-stream {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 9px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-subtle-stream:hover {
+  background-color: rgba(0, 194, 255, 0.12);
+  color: var(--brand-cyan);
+  border-color: var(--brand-cyan);
 }
 
 .icon-action-btn {
@@ -316,7 +1118,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
 }
 
 .icon-action-btn:hover {
@@ -324,59 +1125,17 @@ body {
   background-color: rgba(0, 194, 255, 0.1);
 }
 
-.status-banner-ready {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #34D399;
-}
-
-.btn-subtle-stream {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 9px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-subtle-stream:hover {
-  background-color: rgba(0, 194, 255, 0.1);
-  color: var(--brand-cyan);
-  border-color: var(--brand-cyan);
-}
-
-.btn-subtle-stream.active {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34D399;
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
 .host-notice {
   display: flex;
   align-items: center;
   gap: 10px;
-  background-color: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background-color: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
   color: #FCD34D;
-  padding: 10px 14px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .pulse-indicator {
@@ -394,186 +1153,11 @@ body {
   100% { transform: scale(0.95); opacity: 1; }
 }
 
-/* Card 2: Conectar a um computador */
-.connect-card {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.card-heading {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-white);
-}
-
-.connect-form-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.input-connect-wrapper {
-  position: relative;
-}
-
-.input-remotex {
-  width: 100%;
-  background-color: rgba(8, 16, 30, 0.8);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 11px 14px;
-  font-size: 14px;
-  color: var(--text-white);
-  outline: none;
-  font-family: var(--font-main);
-  transition: all 0.2s ease;
-}
-
-.input-remotex:focus {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 12px var(--brand-accent-glow);
-}
-
-.input-password-sm {
-  font-size: 13px;
-  padding: 9px 12px;
-}
-
-.btn-primary-blue {
-  width: 100%;
-  background: var(--btn-blue);
-  color: #FFFFFF;
-  border: none;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  box-shadow: 0 4px 18px rgba(0, 102, 255, 0.4);
-  transition: all 0.15s ease;
-}
-
-.btn-primary-blue:hover {
-  background: var(--btn-blue-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 22px rgba(0, 102, 255, 0.55);
-}
-
-.error-banner {
-  background-color: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #FCA5A5;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-/* Computadores Recentes */
-.recents-block {
-  margin-top: 10px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.recents-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.recents-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-white);
-}
-
-.link-view-all {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--brand-cyan);
-  text-decoration: none;
-  transition: opacity 0.15s;
-}
-
-.link-view-all:hover {
-  opacity: 0.8;
-}
-
-.recents-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.recent-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  background-color: rgba(8, 16, 30, 0.5);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.recent-row:hover {
-  background-color: var(--bg-card-hover);
-  border-color: var(--brand-cyan);
-}
-
-.recent-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.os-icon {
-  font-size: 14px;
-  color: var(--brand-cyan);
-}
-
-.win-icon {
-  color: #00A3FF;
-}
-
-.recent-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-/* Other Tabs (Computadores, Transferências, Chat, Configurações, Sobre) */
-.tab-header-box {
-  margin-bottom: 24px;
-}
-
-.tab-header-box h2 {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-white);
-}
-
-.tab-header-box p {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-top: 4px;
-}
-
-.unattended-card, .transfer-history-card, .chat-placeholder-card, .settings-card, .about-card {
+.unattended-card, .settings-card {
   background: rgba(14, 26, 45, 0.85);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 24px;
-  max-width: 600px;
+  border-radius: 12px;
+  padding: 20px;
 }
 
 .unattended-header {
@@ -583,8 +1167,8 @@ body {
 }
 
 .unattended-header h3 {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 700;
   color: var(--text-white);
 }
 
@@ -595,22 +1179,22 @@ body {
 }
 
 .unattended-body {
-  margin-top: 18px;
+  margin-top: 16px;
   border-top: 1px solid var(--border-subtle);
-  padding-top: 16px;
+  padding-top: 14px;
 }
 
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .field-group label {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   color: var(--text-secondary);
 }
 
@@ -633,7 +1217,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0;
+  gap: 14px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -642,7 +1227,7 @@ body {
 }
 
 .setting-row strong {
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--text-white);
 }
 
@@ -652,38 +1237,12 @@ body {
   margin-top: 2px;
 }
 
-.about-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 12px;
-  max-width: 500px;
-}
-
-.about-card h2 {
-  font-size: 24px;
-  color: var(--text-white);
-}
-
-.about-card .tagline {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--brand-cyan);
-}
-
-.about-card .desc {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-/* Switch Toggle */
 .switch {
   position: relative;
   display: inline-block;
   width: 44px;
   height: 24px;
+  flex-shrink: 0;
 }
 
 .switch input {
@@ -695,10 +1254,7 @@ body {
 .slider {
   position: absolute;
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background-color: #1E293B;
   transition: .2s;
   border-radius: 34px;
@@ -724,28 +1280,30 @@ input:checked + .slider:before {
   transform: translateX(20px);
 }
 
-/* Session Viewer Overlay */
+/* ============================================================================
+   9. ACTIVE SESSION OVERLAY, TOOLBAR, FILE & CHAT DRAWERS
+   ============================================================================ */
 .session-container {
   position: fixed;
-  top: 0;
+  top: 38px;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height: calc(100vh - 38px);
   background-color: #000;
-  z-index: 9999;
+  z-index: 4000;
   display: flex;
   flex-direction: column;
 }
 
 .session-toolbar {
-  height: 48px;
+  height: 46px;
   background-color: rgba(9, 16, 30, 0.96);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 14px;
   z-index: 20;
   user-select: none;
 }
@@ -753,7 +1311,13 @@ input:checked + .slider:before {
 .toolbar-section {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.session-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .session-metrics {
@@ -772,7 +1336,7 @@ input:checked + .slider:before {
   background-color: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
-  padding: 6px 12px;
+  padding: 6px 11px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
@@ -820,7 +1384,6 @@ input:checked + .slider:before {
   color: #fff;
 }
 
-/* Dropdown Menu */
 .dropdown-wrapper {
   position: relative;
 }
@@ -849,7 +1412,6 @@ input:checked + .slider:before {
   text-align: left;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
 }
 
 .dropdown-item:hover, .dropdown-item.active {
@@ -921,12 +1483,11 @@ input:checked + .slider:before {
   to { transform: rotate(360deg); }
 }
 
-/* File & Chat Drawers */
 .drawer-modal, .chat-drawer-container {
   position: absolute;
-  top: 60px;
+  top: 56px;
   right: 20px;
-  width: 420px;
+  width: 400px;
   background-color: rgba(9, 16, 30, 0.96);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-subtle);
@@ -938,7 +1499,7 @@ input:checked + .slider:before {
 }
 
 .chat-drawer-container {
-  height: calc(100vh - 90px);
+  height: calc(100vh - 120px);
 }
 
 .drawer-header {
@@ -969,7 +1530,7 @@ input:checked + .slider:before {
 .file-upload-zone {
   border: 2px dashed var(--border-subtle);
   border-radius: 10px;
-  padding: 24px;
+  padding: 20px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -1106,6 +1667,12 @@ input:checked + .slider:before {
   color: var(--text-white);
   font-size: 13px;
   outline: none;
+}
+
+.recent-empty {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 14px 0;
 }
 
 .hidden {
