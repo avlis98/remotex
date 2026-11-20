@@ -23,7 +23,8 @@
   let peerConnection = null;
   
   // Dedicated WebRTC Data Channels
-  let inputDataChannel = null;   // mouse/keyboard
+  let inputDataChannel = null;   // mouse/keyboard/control (low latency)
+  let videoDataChannel = null;   // dedicated high-definition screen frames
   let chatDataChannel = null;    // chat messages
   let fileDataChannel = null;    // file transfers
 
@@ -798,33 +799,72 @@
 
   let hasCapturedCanvasThumb = false;
   const incomingFrameChunks = new Map();
+  let lastRenderedFrameSeq = -1;
+  let isDecodingFrame = false;
+  let pendingNextFrame = null;
+  const reusableFrameImage = new Image();
 
-  function renderIncomingDesktopFrame(width, height, jpegB64) {
-    if (!remoteCanvas) return;
-    const img = new Image();
-    img.onload = () => {
-      if (remoteCanvas.width !== img.width || remoteCanvas.height !== img.height) {
-        remoteCanvas.width = img.width;
-        remoteCanvas.height = img.height;
+  reusableFrameImage.onload = () => {
+    if (remoteCanvas) {
+      if (remoteCanvas.width !== reusableFrameImage.width || remoteCanvas.height !== reusableFrameImage.height) {
+        remoteCanvas.width = reusableFrameImage.width;
+        remoteCanvas.height = reusableFrameImage.height;
       }
-      const ctx = remoteCanvas.getContext('2d');
+      const ctx = remoteCanvas.getContext('2d', { alpha: false });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0);
-      if (remoteVideo) remoteVideo.classList.add('hidden');
-      remoteCanvas.classList.remove('hidden');
-      videoLoader.classList.add('hidden');
+      ctx.drawImage(reusableFrameImage, 0, 0);
+      if (remoteVideo && !remoteVideo.classList.contains('hidden')) {
+        remoteVideo.classList.add('hidden');
+      }
+      if (remoteCanvas.classList.contains('hidden')) {
+        remoteCanvas.classList.remove('hidden');
+      }
+      if (videoLoader && !videoLoader.classList.contains('hidden')) {
+        videoLoader.classList.add('hidden');
+      }
       if (metricResolution) {
-        metricResolution.textContent = `${width || img.width}x${height || img.height} HD | Controle Total Ativo`;
+        metricResolution.textContent = `${reusableFrameImage.width}x${reusableFrameImage.height} HD | Controle Total Ativo`;
       }
-      if (!hasCapturedCanvasThumb && remoteDeviceIdInput.value) {
-        hasCapturedCanvasThumb = true;
-        try {
-          upsertSavedDevice(remoteDeviceIdInput.value, { thumbnail: `data:image/jpeg;base64,${jpegB64}` });
-        } catch (e) {}
-      }
-    };
-    img.src = `data:image/jpeg;base64,${jpegB64}`;
+    }
+    isDecodingFrame = false;
+    if (pendingNextFrame) {
+      const next = pendingNextFrame;
+      pendingNextFrame = null;
+      renderIncomingDesktopFrame(next.width, next.height, next.jpeg, next.seq);
+    }
+  };
+
+  reusableFrameImage.onerror = () => {
+    isDecodingFrame = false;
+    pendingNextFrame = null;
+  };
+
+  function renderIncomingDesktopFrame(width, height, jpegB64, seq = 0) {
+    if (!remoteCanvas || !jpegB64) return;
+    // Strict monotonic sequence check: NEVER allow a delayed frame to overwrite a newer frame (eliminates all flickering!)
+    if (seq > 0 && seq <= lastRenderedFrameSeq) {
+      return;
+    }
+    if (seq > 0) {
+      lastRenderedFrameSeq = seq;
+    }
+
+    if (!hasCapturedCanvasThumb && remoteDeviceIdInput.value) {
+      hasCapturedCanvasThumb = true;
+      try {
+        upsertSavedDevice(remoteDeviceIdInput.value, { thumbnail: `data:image/jpeg;base64,${jpegB64}` });
+      } catch (e) {}
+    }
+
+    if (isDecodingFrame) {
+      // Queue only the latest frame (drop intermediate stale frames) so there is zero lag or flicker
+      pendingNextFrame = { width, height, jpeg: jpegB64, seq };
+      return;
+    }
+
+    isDecodingFrame = true;
+    reusableFrameImage.src = `data:image/jpeg;base64,${jpegB64}`;
   }
 
   function generateRandomPassword() {
@@ -868,24 +908,31 @@
           }
           if (data.status === 'frame' && activeSessionId) {
             const b64 = data.jpeg || '';
-            // Prefer WebRTC DataChannel if open (supports chunked 1080p Full HD high-sharpness frames!)
-            if (inputDataChannel && inputDataChannel.readyState === 'open') {
-              if (inputDataChannel.bufferedAmount < 768 * 1024) {
+            const frameSeq = data.seq || Date.now();
+            const activeVideoChannel = (videoDataChannel && videoDataChannel.readyState === 'open')
+              ? videoDataChannel
+              : ((inputDataChannel && inputDataChannel.readyState === 'open') ? inputDataChannel : null);
+
+            // Prefer dedicated WebRTC DataChannel if open (max 1 frame in flight so mouse movement never stutters!)
+            if (activeVideoChannel) {
+              if (activeVideoChannel.bufferedAmount < 96 * 1024) {
                 const MAX_CHUNK = 48000;
                 if (b64.length <= MAX_CHUNK) {
-                  inputDataChannel.send(JSON.stringify({
+                  activeVideoChannel.send(JSON.stringify({
                     type: 'native_frame',
+                    seq: frameSeq,
                     width: data.width,
                     height: data.height,
                     jpeg: b64
                   }));
                 } else {
-                  const frameId = Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+                  const frameId = frameSeq + '-' + Math.random().toString(36).slice(2, 5);
                   const total = Math.ceil(b64.length / MAX_CHUNK);
                   for (let i = 0; i < total; i++) {
-                    inputDataChannel.send(JSON.stringify({
+                    activeVideoChannel.send(JSON.stringify({
                       type: 'native_frame_chunk',
                       frameId,
+                      seq: frameSeq,
                       idx: i,
                       total,
                       width: data.width,
@@ -897,14 +944,15 @@
               }
             } else if (signalingWs && signalingWs.readyState === WebSocket.OPEN) {
               const now = performance.now();
-              if (now - lastRelayFrameSentAt >= 95) {
+              if (now - lastRelayFrameSentAt >= 110) {
                 lastRelayFrameSentAt = now;
                 signalingWs.send(JSON.stringify({
                   type: 'relay_frame',
                   sessionId: activeSessionId,
+                  seq: frameSeq,
                   width: data.width,
                   height: data.height,
-                  jpeg: data.jpeg
+                  jpeg: b64
                 }));
               }
             }
@@ -1044,6 +1092,10 @@
       case 'connect_accepted':
         clearConnectError();
         hasCapturedCanvasThumb = false;
+        lastRenderedFrameSeq = -1;
+        isDecodingFrame = false;
+        pendingNextFrame = null;
+        incomingFrameChunks.clear();
         activeSessionId = msg.sessionId;
         saveRecentDevice(msg.targetDeviceId);
         await setupClientPeerConnection(msg.targetDeviceId, msg.iceServers);
@@ -1055,8 +1107,13 @@
         break;
 
       case 'relay_frame':
+        // Ignore slow Global Mesh relay_frame whenever direct WebRTC DataChannel is already open!
+        if ((videoDataChannel && videoDataChannel.readyState === 'open') ||
+            (inputDataChannel && inputDataChannel.readyState === 'open')) {
+          break;
+        }
         if (msg.jpeg) {
-          renderIncomingDesktopFrame(msg.width, msg.height, msg.jpeg);
+          renderIncomingDesktopFrame(msg.width, msg.height, msg.jpeg, msg.seq || 0);
         }
         break;
 
@@ -1181,6 +1238,18 @@
       if (channel.label === 'remotex-input') {
         inputDataChannel = channel;
         setupHostDataChannelListener(channel);
+      } else if (channel.label === 'remotex-video') {
+        videoDataChannel = channel;
+        channel.onopen = () => {
+          if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+            localInputWs.send(JSON.stringify({ type: 'webrtc_p2p_status', active: true }));
+          }
+        };
+        channel.onclose = () => {
+          if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+            localInputWs.send(JSON.stringify({ type: 'webrtc_p2p_status', active: false }));
+          }
+        };
       } else if (channel.label === 'remotex-chat') {
         chatDataChannel = channel;
         setupChatChannelListener(channel);
@@ -1431,28 +1500,29 @@
 
     setupPeerConnectionAutoReconnect(pc);
 
-    // 1. Data Channel: Input & High-Definition Native Screen Frames
+    // 1. Data Channel: Input (Dedicated exclusively to low-latency Mouse/Keyboard/Ping)
     inputDataChannel = pc.createDataChannel('remotex-input', {
       ordered: true
     });
     inputDataChannel.onopen = () => {
-      console.log('[Controller] Canal de dados de entrada e vídeo HD ativo.');
+      console.log('[Controller] Canal de dados de entrada ativo.');
       startPingMonitoring();
     };
-    inputDataChannel.onmessage = (e) => {
+
+    function handleIncomingVideoDataMessage(e) {
       try {
         const data = JSON.parse(e.data);
         if (data.type === 'pong') {
           const rtt = Math.round(performance.now() - data.sendTime);
           metricPing.textContent = `${rtt} ms`;
         } else if (data.type === 'native_frame' && data.jpeg) {
-          renderIncomingDesktopFrame(data.width, data.height, data.jpeg);
+          renderIncomingDesktopFrame(data.width, data.height, data.jpeg, data.seq || 0);
         } else if (data.type === 'native_frame_chunk') {
           let entry = incomingFrameChunks.get(data.frameId);
           if (!entry) {
-            entry = { parts: new Array(data.total), count: 0, width: data.width, height: data.height };
+            entry = { parts: new Array(data.total), count: 0, width: data.width, height: data.height, seq: data.seq || 0 };
             incomingFrameChunks.set(data.frameId, entry);
-            if (incomingFrameChunks.size > 6) {
+            if (incomingFrameChunks.size > 4) {
               const oldest = incomingFrameChunks.keys().next().value;
               incomingFrameChunks.delete(oldest);
             }
@@ -1461,11 +1531,19 @@
           entry.count++;
           if (entry.count === data.total) {
             incomingFrameChunks.delete(data.frameId);
-            renderIncomingDesktopFrame(entry.width, entry.height, entry.parts.join(''));
+            renderIncomingDesktopFrame(entry.width, entry.height, entry.parts.join(''), entry.seq);
           }
         }
       } catch (err) {}
-    };
+    }
+
+    inputDataChannel.onmessage = handleIncomingVideoDataMessage;
+
+    // 1B. Dedicated Data Channel for HD Video Frames (prevents mouse movement & video frames from interfering!)
+    videoDataChannel = pc.createDataChannel('remotex-video', {
+      ordered: true
+    });
+    videoDataChannel.onmessage = handleIncomingVideoDataMessage;
 
     // 2. Data Channel: Chat
     chatDataChannel = pc.createDataChannel('remotex-chat', { ordered: true });
@@ -1994,6 +2072,13 @@
     if (inputDataChannel) {
       inputDataChannel.close();
       inputDataChannel = null;
+    }
+    if (videoDataChannel) {
+      videoDataChannel.close();
+      videoDataChannel = null;
+    }
+    if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+      localInputWs.send(JSON.stringify({ type: 'webrtc_p2p_status', active: false }));
     }
     if (chatDataChannel) {
       chatDataChannel.close();

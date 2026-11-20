@@ -329,13 +329,16 @@ function connectToLocalWin32Agent() {
     localAgentWs = new WebSocket('ws://127.0.0.1:3001');
     localAgentWs.on('open', () => {
       console.log('[Signaling] Ponte direta Node.js <-> Win32 Agent (porta 3001) ativa.');
+      try {
+        localAgentWs.send(JSON.stringify({ type: 'identify_node_bridge' }));
+      } catch (e) {}
     });
     localAgentWs.on('message', (raw) => {
       try {
         const data = JSON.parse(raw.toString());
         if (data.status === 'frame' && data.jpeg) {
           const now = Date.now();
-          if (now - lastNodeFrameSentAt < 75) return; // ~13 fps steady stream from Node bridge
+          if (now - lastNodeFrameSentAt < 110) return; // ~9 fps fallback stream when WebRTC P2P is not yet active
           lastNodeFrameSentAt = now;
 
           for (const [sId, sess] of sessions.entries()) {
@@ -343,6 +346,7 @@ function connectToLocalWin32Agent() {
               const framePayload = {
                 type: 'relay_frame',
                 sessionId: sId,
+                seq: data.seq || 0,
                 width: data.width,
                 height: data.height,
                 jpeg: data.jpeg

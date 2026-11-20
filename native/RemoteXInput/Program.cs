@@ -161,8 +161,9 @@ namespace RemoteX.NativeInput
         private static readonly object ConsoleLock = new object();
         private static volatile bool isStreaming = false;
         private static volatile int targetFps = 15;
-        private static volatile int jpegQuality = 82;
+        private static volatile int jpegQuality = 80;
         private static volatile int maxCaptureWidth = 1920;
+        private static long frameSequence = 0;
         private static ImageCodecInfo jpegEncoder = null;
 
         // Native Always-On-Top (TopMost) Chat Window so chat always appears over any open app on the remote PC
@@ -558,7 +559,8 @@ namespace RemoteX.NativeInput
                         }
 
                         string b64 = Convert.ToBase64String(ms.ToArray());
-                        WriteJsonLine("{\"status\":\"frame\",\"width\":" + outW + ",\"height\":" + outH + ",\"jpeg\":\"" + b64 + "\"}");
+                        long seq = Interlocked.Increment(ref frameSequence);
+                        WriteJsonLine("{\"status\":\"frame\",\"seq\":" + seq + ",\"width\":" + outW + ",\"height\":" + outH + ",\"jpeg\":\"" + b64 + "\"}");
                     }
                 }
             }

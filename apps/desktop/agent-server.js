@@ -44,14 +44,19 @@ let inputProcess = null;
 let stdoutBuffer = '';
 const localClients = new Set();
 let primaryLocalClient = null;
+let webrtcP2pVideoActive = false;
 const processedSeqs = new Set();
 let lastMouseDownAt = 0;
 let lastMouseUpAt = 0;
 
 function broadcastToLocalClients(msgStr) {
-  // Broadcast to all connected local clients (both signaling server Node bridge and local UI)
+  const isFrame = msgStr.includes('"status":"frame"');
   for (const client of localClients) {
     if (client.readyState === WebSocket.OPEN) {
+      // If WebRTC P2P is active in the browser UI, do not send duplicate video frames to the Node signaling relay bridge!
+      if (isFrame && webrtcP2pVideoActive && client.isNodeSignalingBridge) {
+        continue;
+      }
       try {
         client.send(msgStr);
       } catch (e) {}
@@ -225,6 +230,14 @@ wss.on('connection', (ws, req) => {
   ws.on('message', (raw) => {
     try {
       const cmd = JSON.parse(raw.toString());
+      if (cmd.type === 'identify_node_bridge') {
+        ws.isNodeSignalingBridge = true;
+        return;
+      }
+      if (cmd.type === 'webrtc_p2p_status') {
+        webrtcP2pVideoActive = !!cmd.active;
+        return;
+      }
       primaryLocalClient = ws;
 
       // Deduplicate commands by sequence ID so multiple open tabs or dual channels never execute an input twice
