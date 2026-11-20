@@ -38,7 +38,7 @@ chromePath2 = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 edgePath = "msedge.exe"
 
 appUrl = "http://localhost:3000"
-winParams = " --app=""" & appUrl & """ --window-size=1040,680"
+winParams = " --app=""" & appUrl & """ --window-size=1040,680 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
 
 If fso.FileExists(chromePath1) Then
     WshShell.Run """" & chromePath1 & """" & winParams, 1, False

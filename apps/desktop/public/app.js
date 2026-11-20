@@ -772,9 +772,9 @@
       selectStreamQuality.addEventListener('change', () => {
         const mode = selectStreamQuality.value;
         const preset =
-          mode === 'ultra' ? { maxWidth: 1920, quality: 85, fps: 15 } :
-          mode === 'high'  ? { maxWidth: 1600, quality: 75, fps: 15 } :
-                             { maxWidth: 1366, quality: 62, fps: 15 };
+          mode === 'ultra' ? { maxWidth: 1920, quality: 84, fps: 16 } :
+          mode === 'high'  ? { maxWidth: 1600, quality: 70, fps: 22 } :
+                             { maxWidth: 1366, quality: 58, fps: 25 };
         sendRemoteControlCommand({
           type: 'set_quality',
           maxWidth: preset.maxWidth,
@@ -924,10 +924,10 @@
               ? videoDataChannel
               : ((inputDataChannel && inputDataChannel.readyState === 'open') ? inputDataChannel : null);
 
-            // Prefer dedicated WebRTC DataChannel if open (max 1 frame in flight so mouse movement never stutters!)
+            // Prefer dedicated WebRTC DataChannel if open (max 256KB buffer, 60KB chunks for instant 22 FPS!)
             if (activeVideoChannel) {
-              if (activeVideoChannel.bufferedAmount < 96 * 1024) {
-                const MAX_CHUNK = 48000;
+              if (activeVideoChannel.bufferedAmount < 256 * 1024) {
+                const MAX_CHUNK = 60000;
                 if (b64.length <= MAX_CHUNK) {
                   activeVideoChannel.send(JSON.stringify({
                     type: 'native_frame',
@@ -1222,13 +1222,13 @@
     btnStartHostScreen.classList.add('active');
     hostStreamLabel.textContent = 'Controle Total Ativo';
 
-    // 1. Iniciar imediatamente captura de tela nativa Win32 em Alta Definição (Full HD 1080p @ 82% nitidez) e minimizar janela local para ir direto para a Área de Trabalho
+    // 1. Iniciar imediatamente captura de tela nativa Win32 em Alta Velocidade HD (1600p @ 70% @ 22 FPS) e minimizar janela local
     if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
       localInputWs.send(JSON.stringify({
         type: 'start_capture',
-        fps: 15,
-        quality: 82,
-        maxWidth: 1920
+        fps: 22,
+        quality: 70,
+        maxWidth: 1600
       }));
       localInputWs.send(JSON.stringify({
         type: 'minimize_window'

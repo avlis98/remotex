@@ -160,11 +160,13 @@ namespace RemoteX.NativeInput
 
         private static readonly object ConsoleLock = new object();
         private static volatile bool isStreaming = false;
-        private static volatile int targetFps = 15;
-        private static volatile int jpegQuality = 80;
-        private static volatile int maxCaptureWidth = 1920;
+        private static volatile int targetFps = 22;
+        private static volatile int jpegQuality = 70;
+        private static volatile int maxCaptureWidth = 1600;
         private static long frameSequence = 0;
         private static ImageCodecInfo jpegEncoder = null;
+        private static Bitmap reusableFullBmp = null;
+        private static Bitmap reusableScaledBmp = null;
 
         // Native Always-On-Top (TopMost) Chat Window so chat always appears over any open app on the remote PC
         private static Form chatForm = null;
@@ -508,60 +510,64 @@ namespace RemoteX.NativeInput
                     outH = Math.Max(360, (int)Math.Round(height * ratio));
                 }
 
-                using (Bitmap fullBmp = new Bitmap(width, height, PixelFormat.Format24bppRgb))
+                if (reusableFullBmp == null || reusableFullBmp.Width != width || reusableFullBmp.Height != height)
                 {
-                    using (Graphics g = Graphics.FromImage(fullBmp))
-                    {
-                        g.CopyFromScreen(left, top, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
+                    if (reusableFullBmp != null) reusableFullBmp.Dispose();
+                    reusableFullBmp = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+                }
 
-                        // Draw mouse cursor onto captured frame
-                        CURSORINFO pci = new CURSORINFO();
-                        pci.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
-                        if (GetCursorInfo(out pci) && (pci.flags & CURSOR_SHOWING) != 0 && pci.hCursor != IntPtr.Zero)
+                using (Graphics g = Graphics.FromImage(reusableFullBmp))
+                {
+                    g.CopyFromScreen(left, top, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
+
+                    // Draw mouse cursor onto captured frame
+                    CURSORINFO pci = new CURSORINFO();
+                    pci.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
+                    if (GetCursorInfo(out pci) && (pci.flags & CURSOR_SHOWING) != 0 && pci.hCursor != IntPtr.Zero)
+                    {
+                        IntPtr hdc = g.GetHdc();
+                        try
                         {
-                            IntPtr hdc = g.GetHdc();
-                            try
-                            {
-                                DrawIcon(hdc, pci.ptScreenPos.x - left, pci.ptScreenPos.y - top, pci.hCursor);
-                            }
-                            finally
-                            {
-                                g.ReleaseHdc(hdc);
-                            }
+                            DrawIcon(hdc, pci.ptScreenPos.x - left, pci.ptScreenPos.y - top, pci.hCursor);
+                        }
+                        finally
+                        {
+                            g.ReleaseHdc(hdc);
                         }
                     }
+                }
 
-                    using (MemoryStream ms = new MemoryStream())
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    var encoder = GetJpegEncoder();
+                    var encParams = new EncoderParameters(1);
+                    encParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)jpegQuality);
+
+                    if (outW != width || outH != height)
                     {
-                        var encoder = GetJpegEncoder();
-                        var encParams = new EncoderParameters(1);
-                        encParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)jpegQuality);
-
-                        if (outW != width || outH != height)
+                        if (reusableScaledBmp == null || reusableScaledBmp.Width != outW || reusableScaledBmp.Height != outH)
                         {
-                            using (Bitmap scaledBmp = new Bitmap(outW, outH, PixelFormat.Format24bppRgb))
-                            {
-                                using (Graphics gs = Graphics.FromImage(scaledBmp))
-                                {
-                                    gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                                    gs.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                                    gs.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                                    gs.DrawImage(fullBmp, 0, 0, outW, outH);
-                                }
-                                if (encoder != null) scaledBmp.Save(ms, encoder, encParams);
-                                else scaledBmp.Save(ms, ImageFormat.Jpeg);
-                            }
+                            if (reusableScaledBmp != null) reusableScaledBmp.Dispose();
+                            reusableScaledBmp = new Bitmap(outW, outH, PixelFormat.Format24bppRgb);
                         }
-                        else
+                        using (Graphics gs = Graphics.FromImage(reusableScaledBmp))
                         {
-                            if (encoder != null) fullBmp.Save(ms, encoder, encParams);
-                            else fullBmp.Save(ms, ImageFormat.Jpeg);
+                            gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+                            gs.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
+                            gs.DrawImage(reusableFullBmp, 0, 0, outW, outH);
                         }
-
-                        string b64 = Convert.ToBase64String(ms.ToArray());
-                        long seq = Interlocked.Increment(ref frameSequence);
-                        WriteJsonLine("{\"status\":\"frame\",\"seq\":" + seq + ",\"width\":" + outW + ",\"height\":" + outH + ",\"jpeg\":\"" + b64 + "\"}");
+                        if (encoder != null) reusableScaledBmp.Save(ms, encoder, encParams);
+                        else reusableScaledBmp.Save(ms, ImageFormat.Jpeg);
                     }
+                    else
+                    {
+                        if (encoder != null) reusableFullBmp.Save(ms, encoder, encParams);
+                        else reusableFullBmp.Save(ms, ImageFormat.Jpeg);
+                    }
+
+                    string b64 = Convert.ToBase64String(ms.ToArray());
+                    long seq = Interlocked.Increment(ref frameSequence);
+                    WriteJsonLine("{\"status\":\"frame\",\"seq\":" + seq + ",\"width\":" + outW + ",\"height\":" + outH + ",\"jpeg\":\"" + b64 + "\"}");
                 }
             }
             catch (Exception ex)
@@ -579,8 +585,8 @@ namespace RemoteX.NativeInput
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     CaptureAndSendFrame();
                     sw.Stop();
-                    int intervalMs = Math.Max(40, 1000 / Math.Max(1, targetFps));
-                    int sleepMs = Math.Max(10, intervalMs - (int)sw.ElapsedMilliseconds);
+                    int intervalMs = Math.Max(30, 1000 / Math.Max(1, targetFps));
+                    int sleepMs = Math.Max(5, intervalMs - (int)sw.ElapsedMilliseconds);
                     Thread.Sleep(sleepMs);
                 }
                 else

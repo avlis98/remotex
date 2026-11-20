@@ -533,7 +533,7 @@ function handleGlobalMeshMessage(topic, msg) {
         }
 
         // Password matched -> Instant Full Control & Auto-Minimize Host Window to show Desktop!
-        sendToLocalWin32Agent({ type: 'start_capture', fps: 15, quality: 82, maxWidth: 1920 });
+        sendToLocalWin32Agent({ type: 'start_capture', fps: 22, quality: 70, maxWidth: 1600 });
         sendToLocalWin32Agent({ type: 'minimize_window' });
         send(targetHost.ws, {
           type: 'incoming_connection',
@@ -831,7 +831,7 @@ wss.on('connection', (ws, req) => {
           }
 
           // Accepted! Start Full Control on Host, auto-minimize Host window to Desktop & notify Client
-          sendToLocalWin32Agent({ type: 'start_capture', fps: 15, quality: 82, maxWidth: 1920 });
+          sendToLocalWin32Agent({ type: 'start_capture', fps: 22, quality: 70, maxWidth: 1600 });
           sendToLocalWin32Agent({ type: 'minimize_window' });
           if (sess.hostWs) {
             send(sess.hostWs, {
