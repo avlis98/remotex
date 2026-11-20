@@ -11,15 +11,6 @@ WshShell.Run "cmd /c cd /d """ & strPath & """ && node services\signaling\server
 ' 2. Inicia o Servidor Relay de forma oculta
 WshShell.Run "cmd /c cd /d """ & strPath & """ && node services\relay\relay-server.js", 0, False
 
-' Inicia o Cloudflare Tunnel para permitir conexao entre computadores pela Internet
-cloudflared1 = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
-cloudflared2 = "C:\Program Files\cloudflared\cloudflared.exe"
-If fso.FileExists(cloudflared1) Then
-    WshShell.Run """" & cloudflared1 & """ tunnel --url http://localhost:8080", 0, False
-ElseIf fso.FileExists(cloudflared2) Then
-    WshShell.Run """" & cloudflared2 & """ tunnel --url http://localhost:8080", 0, False
-End If
-
 ' 3. Inicia o Agente Desktop e Injetor Win32 de forma oculta
 WshShell.Run "cmd /c cd /d """ & strPath & """ && node apps\desktop\agent-server.js", 0, False
 

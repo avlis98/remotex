@@ -3,8 +3,17 @@
   'use strict';
 
   // Configuration
-  const CLOUD_SIGNALING_URL = 'wss://pointing-mayor-send-wishes.trycloudflare.com';
-  let SIGNALING_URL = localStorage.getItem('remotex_signaling_url') || CLOUD_SIGNALING_URL;
+  const DEFAULT_LOCAL_SIGNALING_URL = 'ws://localhost:8080';
+  let discoveredCloudUrl = null;
+  let discoveredLanUrl = null;
+
+  // Força uso automático do motor local + Global Mesh (descarta túneis antigos trycloudflare salvos)
+  const savedSignalingUrl = localStorage.getItem('remotex_signaling_url');
+  if (savedSignalingUrl && savedSignalingUrl.includes('.trycloudflare.com')) {
+    localStorage.removeItem('remotex_signaling_url');
+  }
+
+  let SIGNALING_URL = localStorage.getItem('remotex_signaling_url') || DEFAULT_LOCAL_SIGNALING_URL;
   const LOCAL_INPUT_WS_URL = 'ws://localhost:3001';
   const CHUNK_SIZE = 64 * 1024; // 64KB chunks for optimal WebRTC SCTP throughput
 
@@ -138,9 +147,37 @@
     // Settings elements
     const settingSignalingInput = document.getElementById('setting-signaling-url');
     const btnSaveSignaling = document.getElementById('btn-save-signaling');
+    const btnUseCloudTunnel = document.getElementById('btn-use-cloud-tunnel');
     const btnResetSignalingLocal = document.getElementById('btn-reset-signaling-local');
+    const cloudTunnelHint = document.getElementById('cloud-tunnel-hint');
 
     if (settingSignalingInput) settingSignalingInput.value = SIGNALING_URL;
+
+    // Verifica status da Rede Global Mesh P2P e IP da rede local
+    async function pollLocalSignalingStatus() {
+      try {
+        const res = await fetch('http://localhost:8080/api/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.lanSignalingUrl) discoveredLanUrl = data.lanSignalingUrl;
+        if (data.globalMeshConnected) {
+          discoveredCloudUrl = DEFAULT_LOCAL_SIGNALING_URL;
+          if (cloudTunnelHint) {
+            cloudTunnelHint.textContent = `✓ Rede Global Automática Ativa (${data.globalMeshBroker}) • Pronto para qualquer PC via Internet ou Rede Local`;
+            cloudTunnelHint.style.color = '#10B981';
+          }
+        } else if (cloudTunnelHint) {
+          cloudTunnelHint.textContent = `Conectando à Rede Global... (Rede Local ativa: ${discoveredLanUrl || 'ws://localhost:8080'})`;
+          cloudTunnelHint.style.color = '#F59E0B';
+        }
+      } catch (e) {
+        if (cloudTunnelHint) {
+          cloudTunnelHint.textContent = 'Conectado via endereço configurado.';
+        }
+      }
+    }
+    pollLocalSignalingStatus();
+    setInterval(pollLocalSignalingStatus, 5000);
 
     if (btnSaveSignaling) {
       btnSaveSignaling.addEventListener('click', () => {
@@ -155,9 +192,27 @@
       });
     }
 
+    if (btnUseCloudTunnel) {
+      btnUseCloudTunnel.addEventListener('click', async () => {
+        await pollLocalSignalingStatus();
+        const targetUrl = discoveredCloudUrl || discoveredLanUrl || DEFAULT_LOCAL_SIGNALING_URL;
+        SIGNALING_URL = targetUrl;
+        localStorage.setItem('remotex_signaling_url', SIGNALING_URL);
+        if (settingSignalingInput) settingSignalingInput.value = SIGNALING_URL;
+        if (signalingWs) signalingWs.close();
+        connectToSignaling();
+        if (discoveredCloudUrl) {
+          navigator.clipboard.writeText(discoveredCloudUrl).catch(() => {});
+          alert('Conectado ao Túnel de Internet ativo e link copiado para a área de transferência:\n' + discoveredCloudUrl);
+        } else {
+          alert('Túnel Cloudflare ainda iniciando. Usando endereço de rede local: ' + targetUrl);
+        }
+      });
+    }
+
     if (btnResetSignalingLocal) {
       btnResetSignalingLocal.addEventListener('click', () => {
-        SIGNALING_URL = 'ws://localhost:8080';
+        SIGNALING_URL = DEFAULT_LOCAL_SIGNALING_URL;
         localStorage.setItem('remotex_signaling_url', SIGNALING_URL);
         if (settingSignalingInput) settingSignalingInput.value = SIGNALING_URL;
         if (signalingWs) signalingWs.close();
@@ -434,12 +489,17 @@
   }
 
   // Signaling Server Connection
+  let signalingFailCount = 0;
+
   function connectToSignaling() {
     updateSignalingStatus('disconnected', 'Conectando ao Servidor...');
+    let opened = false;
     try {
       signalingWs = new WebSocket(SIGNALING_URL);
 
       signalingWs.onopen = () => {
+        opened = true;
+        signalingFailCount = 0;
         updateSignalingStatus('connected', 'Conectado ao Servidor Central');
         registerAsHost();
       };
@@ -454,6 +514,22 @@
       };
 
       signalingWs.onclose = () => {
+        if (!opened) {
+          signalingFailCount++;
+          // Se o túnel antigo falhar ao conectar, faz fallback automático para o novo túnel ou servidor local
+          if (signalingFailCount >= 1 && SIGNALING_URL !== DEFAULT_LOCAL_SIGNALING_URL) {
+            const fallbackUrl = (discoveredCloudUrl && SIGNALING_URL !== discoveredCloudUrl)
+              ? discoveredCloudUrl
+              : DEFAULT_LOCAL_SIGNALING_URL;
+            console.warn(`[Signaling] Falha ao conectar em ${SIGNALING_URL}. Alternando automaticamente para ${fallbackUrl}`);
+            SIGNALING_URL = fallbackUrl;
+            localStorage.setItem('remotex_signaling_url', SIGNALING_URL);
+            const settingInput = document.getElementById('setting-signaling-url');
+            if (settingInput) settingInput.value = SIGNALING_URL;
+            setTimeout(connectToSignaling, 500);
+            return;
+          }
+        }
         updateSignalingStatus('disconnected', 'Desconectado (Reconectando em 3s...)');
         setTimeout(connectToSignaling, 3000);
       };

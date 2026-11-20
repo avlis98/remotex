@@ -302,14 +302,16 @@
             <div class="setting-row">
               <div>
                 <strong>Servidor Central de Conexão</strong>
-                <p>Endereço de sincronização entre diferentes PCs (Internet/Nuvem)</p>
+                <p>Endereço de sincronização entre diferentes PCs (Local / Rede / Internet)</p>
               </div>
-              <div style="display:flex; flex-direction:column; gap:8px; width: 100%; max-width: 320px;">
-                <input type="text" id="setting-signaling-url" class="input-remotex" value="wss://pointing-mayor-send-wishes.trycloudflare.com" />
-                <div style="display:flex; gap:6px;">
+              <div style="display:flex; flex-direction:column; gap:8px; width: 100%; max-width: 340px;">
+                <input type="text" id="setting-signaling-url" class="input-remotex" value="ws://localhost:8080" />
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
                   <button id="btn-save-signaling" class="btn-primary-blue" style="padding: 8px 14px; font-size: 12px;">Salvar e Reconectar</button>
+                  <button id="btn-use-cloud-tunnel" class="btn-subtle-stream" style="padding: 8px 10px; font-size: 11px;">Usar Túnel Internet</button>
                   <button id="btn-reset-signaling-local" class="btn-subtle-stream" style="padding: 8px 10px; font-size: 11px;">Restaurar Local</button>
                 </div>
+                <small id="cloud-tunnel-hint" style="color: #94a3b8; font-size: 11px;">Detectando túnel de internet...</small>
               </div>
             </div>
             <div class="setting-row">
