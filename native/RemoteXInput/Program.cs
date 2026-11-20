@@ -117,6 +117,182 @@ namespace RemoteX.NativeInput
         private static volatile int maxCaptureWidth = 1366;
         private static ImageCodecInfo jpegEncoder = null;
 
+        // Native Always-On-Top (TopMost) Chat Window so chat always appears over any open app on the remote PC
+        private static Form chatForm = null;
+        private static RichTextBox chatHistoryBox = null;
+        private static TextBox chatInputBox = null;
+        private static Thread chatUiThread = null;
+        private static readonly ManualResetEvent chatUiReady = new ManualResetEvent(false);
+
+        private static void EnsureChatWindowThread()
+        {
+            if (chatUiThread != null && chatUiThread.IsAlive) return;
+            chatUiReady.Reset();
+            chatUiThread = new Thread(() =>
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                chatForm = new Form
+                {
+                    Text = "RemoteX - Chat da Sessão",
+                    Size = new Size(360, 420),
+                    FormBorderStyle = FormBorderStyle.FixedToolWindow,
+                    StartPosition = FormStartPosition.Manual,
+                    TopMost = true,
+                    ShowInTaskbar = true,
+                    BackColor = Color.FromArgb(11, 20, 36),
+                    ForeColor = Color.White
+                };
+
+                Rectangle workArea = Screen.PrimaryScreen.WorkingArea;
+                chatForm.Location = new Point(workArea.Right - chatForm.Width - 20, workArea.Bottom - chatForm.Height - 20);
+
+                Panel header = new Panel
+                {
+                    Dock = DockStyle.Top,
+                    Height = 38,
+                    BackColor = Color.FromArgb(0, 102, 243)
+                };
+                Label titleLbl = new Label
+                {
+                    Text = "💬 Chat da Sessão RemoteX",
+                    Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                    ForeColor = Color.White,
+                    Location = new Point(12, 9),
+                    AutoSize = true
+                };
+                header.Controls.Add(titleLbl);
+
+                Panel bottomPanel = new Panel
+                {
+                    Dock = DockStyle.Bottom,
+                    Height = 46,
+                    Padding = new Padding(8),
+                    BackColor = Color.FromArgb(9, 16, 30)
+                };
+
+                chatInputBox = new TextBox
+                {
+                    Location = new Point(10, 11),
+                    Width = 248,
+                    Font = new Font("Segoe UI", 9.5f),
+                    BackColor = Color.FromArgb(18, 32, 56),
+                    ForeColor = Color.White,
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+
+                Button btnSend = new Button
+                {
+                    Text = "Enviar",
+                    Location = new Point(266, 9),
+                    Size = new Size(70, 27),
+                    BackColor = Color.FromArgb(0, 112, 243),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Flat,
+                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                    Cursor = Cursors.Hand
+                };
+                btnSend.FlatAppearance.BorderSize = 0;
+
+                Action sendReplyAction = () =>
+                {
+                    string txt = chatInputBox.Text.Trim();
+                    if (string.IsNullOrEmpty(txt)) return;
+                    chatInputBox.Text = "";
+                    string timeStr = DateTime.Now.ToString("HH:mm");
+                    AppendNativeChatLine("Você", txt, timeStr, true);
+                    WriteJsonLine("{\"status\":\"chat_reply\",\"text\":\"" + EscapeJson(txt) + "\",\"timestamp\":\"" + timeStr + "\"}");
+                };
+
+                btnSend.Click += (s, e) => sendReplyAction();
+                chatInputBox.KeyDown += (s, e) =>
+                {
+                    if (e.KeyCode == Keys.Enter)
+                    {
+                        e.SuppressKeyPress = true;
+                        sendReplyAction();
+                    }
+                };
+
+                bottomPanel.Controls.Add(chatInputBox);
+                bottomPanel.Controls.Add(btnSend);
+
+                chatHistoryBox = new RichTextBox
+                {
+                    Dock = DockStyle.Fill,
+                    ReadOnly = true,
+                    BackColor = Color.FromArgb(11, 20, 36),
+                    ForeColor = Color.FromArgb(241, 245, 249),
+                    BorderStyle = BorderStyle.None,
+                    Font = new Font("Segoe UI", 9.5f),
+                    Padding = new Padding(10)
+                };
+
+                chatForm.Controls.Add(chatHistoryBox);
+                chatForm.Controls.Add(bottomPanel);
+                chatForm.Controls.Add(header);
+
+                // Hide instead of destroying on close so future messages reopen it immediately
+                chatForm.FormClosing += (s, e) =>
+                {
+                    if (e.CloseReason == CloseReason.UserClosing)
+                    {
+                        e.Cancel = true;
+                        chatForm.Hide();
+                    }
+                };
+
+                chatForm.Load += (s, e) => chatUiReady.Set();
+                chatForm.Show();
+                chatForm.Hide();
+                chatUiReady.Set();
+                Application.Run();
+            });
+            chatUiThread.SetApartmentState(ApartmentState.STA);
+            chatUiThread.IsBackground = true;
+            chatUiThread.Start();
+            chatUiReady.WaitOne(1500);
+        }
+
+        private static void AppendNativeChatLine(string sender, string text, string timeStr, bool isSelf)
+        {
+            if (chatHistoryBox == null) return;
+            chatHistoryBox.SelectionStart = chatHistoryBox.TextLength;
+            chatHistoryBox.SelectionLength = 0;
+            chatHistoryBox.SelectionColor = isSelf ? Color.FromArgb(0, 194, 255) : Color.FromArgb(52, 211, 153);
+            chatHistoryBox.SelectionFont = new Font("Segoe UI", 9f, FontStyle.Bold);
+            chatHistoryBox.AppendText($"[{timeStr}] {sender}: ");
+
+            chatHistoryBox.SelectionColor = Color.White;
+            chatHistoryBox.SelectionFont = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+            chatHistoryBox.AppendText(text + Environment.NewLine + Environment.NewLine);
+            chatHistoryBox.ScrollToCaret();
+        }
+
+        private static void ShowIncomingChatPopup(string sender, string text, string timeStr)
+        {
+            try
+            {
+                EnsureChatWindowThread();
+                if (chatForm != null && chatForm.IsHandleCreated)
+                {
+                    chatForm.BeginInvoke(new Action(() =>
+                    {
+                        Rectangle workArea = Screen.PrimaryScreen.WorkingArea;
+                        chatForm.Location = new Point(workArea.Right - chatForm.Width - 20, workArea.Bottom - chatForm.Height - 20);
+                        if (!chatForm.Visible) chatForm.Show();
+                        if (chatForm.WindowState == FormWindowState.Minimized) chatForm.WindowState = FormWindowState.Normal;
+                        chatForm.TopMost = true;
+                        chatForm.BringToFront();
+                        AppendNativeChatLine(string.IsNullOrEmpty(sender) ? "Remoto" : sender, text, string.IsNullOrEmpty(timeStr) ? DateTime.Now.ToString("HH:mm") : timeStr, false);
+                        System.Media.SystemSounds.Asterisk.Play();
+                    }));
+                }
+            }
+            catch { }
+        }
+
         private static ImageCodecInfo GetJpegEncoder()
         {
             if (jpegEncoder != null) return jpegEncoder;
@@ -519,6 +695,16 @@ namespace RemoteX.NativeInput
                                 });
                                 staThread.SetApartmentState(ApartmentState.STA);
                                 staThread.Start();
+                            }
+                            break;
+
+                        case "chat_popup":
+                            string chatText = ExtractString(line, "text");
+                            string chatTime = ExtractString(line, "timestamp");
+                            string chatSender = ExtractString(line, "sender");
+                            if (!string.IsNullOrEmpty(chatText))
+                            {
+                                ShowIncomingChatPopup(chatSender, chatText, chatTime);
                             }
                             break;
 

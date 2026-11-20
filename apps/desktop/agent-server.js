@@ -43,7 +43,7 @@ function startInputAgent() {
         const line = stdoutBuffer.slice(0, nlIndex).trim();
         stdoutBuffer = stdoutBuffer.slice(nlIndex + 1);
         if (!line) continue;
-        if (line.includes('"status":"frame"')) {
+        if (line.includes('"status":"frame"') || line.includes('"status":"chat_reply"')) {
           broadcastToLocalClients(line);
         }
       }

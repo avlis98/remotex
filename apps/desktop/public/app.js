@@ -748,6 +748,7 @@
       }
       const ctx = remoteCanvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
+      if (remoteVideo) remoteVideo.classList.add('hidden');
       remoteCanvas.classList.remove('hidden');
       videoLoader.classList.add('hidden');
       if (metricResolution) {
@@ -782,6 +783,26 @@
       localInputWs.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
+          // If the remote user typed a reply inside the native Windows TopMost Chat Popup, send it to the other peer!
+          if (data.status === 'chat_reply' && data.text) {
+            const timeStr = data.timestamp || new Date().toTimeString().slice(0, 5);
+            if (chatDataChannel && chatDataChannel.readyState === 'open') {
+              chatDataChannel.send(JSON.stringify({
+                type: 'chat_message',
+                text: data.text,
+                timestamp: timeStr
+              }));
+            } else if (activeSessionId && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
+              signalingWs.send(JSON.stringify({
+                type: 'relay_chat',
+                sessionId: activeSessionId,
+                text: data.text,
+                timestamp: timeStr
+              }));
+            }
+            appendChatMessage(data.text, 'outgoing', timeStr);
+            return;
+          }
           if (data.status === 'frame' && activeSessionId) {
             const framePacket = {
               type: 'native_frame',
@@ -967,12 +988,7 @@
 
       case 'relay_chat':
         if (msg.text) {
-          appendChatMessage(msg.text, 'incoming', msg.timestamp);
-          if (!isChatOpen) {
-            unreadChatCount++;
-            chatBadge.textContent = unreadChatCount;
-            chatBadge.classList.remove('hidden');
-          }
+          handleIncomingChatMessage(msg.text, msg.timestamp);
         }
         break;
 
@@ -1371,6 +1387,8 @@
     pc.ontrack = (event) => {
       console.log('[Controller] Stream de vídeo remoto recebido com sucesso!', event.streams[0]);
       videoLoader.classList.add('hidden');
+      if (remoteCanvas) remoteCanvas.classList.add('hidden');
+      remoteVideo.classList.remove('hidden');
       if (remoteVideo.srcObject !== event.streams[0]) {
         remoteVideo.srcObject = event.streams[0];
       }
@@ -1426,18 +1444,37 @@
     resetConnectButton();
   }
 
-  // Chat Subsystem
+  // Chat Subsystem (Auto-opens on screen whenever a message is sent or received + triggers native TopMost Windows chat box on Host)
+  function openChatBoxOnScreen() {
+    isChatOpen = true;
+    if (chatDrawer) chatDrawer.classList.remove('hidden');
+    unreadChatCount = 0;
+    if (chatBadge) {
+      chatBadge.classList.add('hidden');
+      chatBadge.textContent = '0';
+    }
+  }
+
+  function handleIncomingChatMessage(text, timeStr) {
+    openChatBoxOnScreen();
+    appendChatMessage(text, 'incoming', timeStr);
+    // Also trigger the native Windows TopMost Chat Popup via RemoteXInput.exe so it appears over any open app (PDF, Chrome, Word, etc.)
+    if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+      localInputWs.send(JSON.stringify({
+        type: 'chat_popup',
+        sender: 'Remoto',
+        text,
+        timestamp: timeStr || ''
+      }));
+    }
+  }
+
   function setupChatChannelListener(channel) {
     channel.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'chat_message') {
-          appendChatMessage(msg.text, 'incoming', msg.timestamp);
-          if (!isChatOpen) {
-            unreadChatCount++;
-            chatBadge.textContent = unreadChatCount;
-            chatBadge.classList.remove('hidden');
-          }
+          handleIncomingChatMessage(msg.text, msg.timestamp);
         }
       } catch (err) {}
     };
@@ -1446,6 +1483,7 @@
   function sendChatMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
+    openChatBoxOnScreen();
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     if (chatDataChannel && chatDataChannel.readyState === 'open') {

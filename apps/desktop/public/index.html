@@ -515,10 +515,10 @@
         </div>
       </nav>
 
-      <!-- Video & Native Desktop Canvas Area -->
+      <!-- Video & Native Desktop Canvas Area (100% Centered on Monitor) -->
       <div class="video-wrapper" id="video-wrapper" tabindex="0">
-        <canvas id="remote-canvas" class="hidden" style="max-width: 100%; max-height: 100%; object-fit: contain; outline: none; cursor: default;"></canvas>
-        <video id="remote-video" autoplay playsinline muted tabindex="0"></video>
+        <canvas id="remote-canvas" class="hidden"></canvas>
+        <video id="remote-video" class="hidden" autoplay playsinline muted tabindex="0"></video>
         
         <div id="reconnecting-overlay" class="reconnect-banner hidden">
           <div class="spinner-small"></div>
@@ -527,7 +527,7 @@
 
         <div id="video-loader" class="loader-container">
           <div class="spinner"></div>
-          <p>Estabelecendo canal WebRTC seguro com baixa latência...</p>
+          <p>Estabelecendo canal seguro de baixa latência...</p>
         </div>
       </div>
 
@@ -564,25 +564,25 @@
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Chat Drawer -->
-      <div id="chat-drawer" class="chat-drawer-container hidden">
-        <div class="drawer-header">
-          <div class="drawer-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            <h3>Chat da Sessão</h3>
-          </div>
-          <button id="btn-close-chat" class="icon-action-btn">✕</button>
+    <!-- Global Floating Chat Drawer (Appears automatically on both Controller and Host screens whenever a message is sent/received) -->
+    <div id="chat-drawer" class="chat-drawer-container hidden">
+      <div class="drawer-header">
+        <div class="drawer-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00C2FF" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <h3>Chat da Sessão</h3>
         </div>
-        <div class="chat-messages" id="chat-messages">
-          <div class="chat-system-msg">Sessão criptografada de ponta a ponta.</div>
-        </div>
-        <div class="chat-input-bar">
-          <input type="text" id="chat-input" placeholder="Digite uma mensagem..." />
-          <button id="btn-send-chat" class="btn-primary-blue" style="padding: 8px 12px; width: auto;">Enviar</button>
-        </div>
+        <button id="btn-close-chat" class="icon-action-btn">✕</button>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-system-msg">Sessão criptografada de ponta a ponta.</div>
+      </div>
+      <div class="chat-input-bar">
+        <input type="text" id="chat-input" placeholder="Digite uma mensagem..." />
+        <button id="btn-send-chat" class="btn-primary-blue" style="padding: 8px 12px; width: auto;">Enviar</button>
       </div>
     </div>
   </div>
