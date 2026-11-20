@@ -718,13 +718,35 @@
       }
     });
 
+    const selectStreamQuality = document.getElementById('select-stream-quality');
+    if (selectStreamQuality) {
+      selectStreamQuality.addEventListener('change', () => {
+        const mode = selectStreamQuality.value;
+        const preset =
+          mode === 'ultra' ? { maxWidth: 1920, quality: 85, fps: 15 } :
+          mode === 'high'  ? { maxWidth: 1600, quality: 75, fps: 15 } :
+                             { maxWidth: 1366, quality: 62, fps: 15 };
+        sendRemoteControlCommand({
+          type: 'set_quality',
+          maxWidth: preset.maxWidth,
+          quality: preset.quality,
+          fps: preset.fps
+        });
+      });
+    }
+
     setupRemoteInputCapture();
   }
 
+  let inputSeqCounter = 0;
   function sendRemoteControlCommand(cmd) {
+    const payload = {
+      ...cmd,
+      seq: `${myDeviceId || 'ctrl'}-${++inputSeqCounter}-${Date.now()}`
+    };
     if (inputDataChannel && inputDataChannel.readyState === 'open') {
       try {
-        inputDataChannel.send(JSON.stringify(cmd));
+        inputDataChannel.send(JSON.stringify(payload));
         return;
       } catch (e) {}
     }
@@ -732,12 +754,14 @@
       signalingWs.send(JSON.stringify({
         type: 'relay_input',
         sessionId: activeSessionId,
-        cmd
+        cmd: payload
       }));
     }
   }
 
   let hasCapturedCanvasThumb = false;
+  const incomingFrameChunks = new Map();
+
   function renderIncomingDesktopFrame(width, height, jpegB64) {
     if (!remoteCanvas) return;
     const img = new Image();
@@ -747,12 +771,14 @@
         remoteCanvas.height = img.height;
       }
       const ctx = remoteCanvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0);
       if (remoteVideo) remoteVideo.classList.add('hidden');
       remoteCanvas.classList.remove('hidden');
       videoLoader.classList.add('hidden');
       if (metricResolution) {
-        metricResolution.textContent = `${width || img.width}x${height || img.height} | Controle Total Ativo`;
+        metricResolution.textContent = `${width || img.width}x${height || img.height} HD | Controle Total Ativo`;
       }
       if (!hasCapturedCanvasThumb && remoteDeviceIdInput.value) {
         hasCapturedCanvasThumb = true;
@@ -804,16 +830,33 @@
             return;
           }
           if (data.status === 'frame' && activeSessionId) {
-            const framePacket = {
-              type: 'native_frame',
-              width: data.width,
-              height: data.height,
-              jpeg: data.jpeg
-            };
-            // Prefer WebRTC DataChannel if open, otherwise stream via Signaling/Global Mesh relay
+            const b64 = data.jpeg || '';
+            // Prefer WebRTC DataChannel if open (supports chunked 1080p Full HD high-sharpness frames!)
             if (inputDataChannel && inputDataChannel.readyState === 'open') {
-              if (inputDataChannel.bufferedAmount < 512 * 1024) {
-                inputDataChannel.send(JSON.stringify(framePacket));
+              if (inputDataChannel.bufferedAmount < 768 * 1024) {
+                const MAX_CHUNK = 48000;
+                if (b64.length <= MAX_CHUNK) {
+                  inputDataChannel.send(JSON.stringify({
+                    type: 'native_frame',
+                    width: data.width,
+                    height: data.height,
+                    jpeg: b64
+                  }));
+                } else {
+                  const frameId = Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+                  const total = Math.ceil(b64.length / MAX_CHUNK);
+                  for (let i = 0; i < total; i++) {
+                    inputDataChannel.send(JSON.stringify({
+                      type: 'native_frame_chunk',
+                      frameId,
+                      idx: i,
+                      total,
+                      width: data.width,
+                      height: data.height,
+                      chunk: b64.slice(i * MAX_CHUNK, (i + 1) * MAX_CHUNK)
+                    }));
+                  }
+                }
               }
             } else if (signalingWs && signalingWs.readyState === WebSocket.OPEN) {
               const now = performance.now();
@@ -1074,12 +1117,13 @@
     btnStartHostScreen.classList.add('active');
     hostStreamLabel.textContent = 'Controle Total Ativo';
 
-    // 1. Iniciar imediatamente captura de tela nativa Win32 (sem depender de popup getDisplayMedia do navegador!)
+    // 1. Iniciar imediatamente captura de tela nativa Win32 em Alta Definição (Full HD 1080p @ 82% nitidez)
     if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
       localInputWs.send(JSON.stringify({
         type: 'start_capture',
-        fps: 12,
-        quality: 58
+        fps: 15,
+        quality: 82,
+        maxWidth: 1920
       }));
     }
 
@@ -1347,13 +1391,12 @@
 
     setupPeerConnectionAutoReconnect(pc);
 
-    // 1. Data Channel: Input
+    // 1. Data Channel: Input & High-Definition Native Screen Frames
     inputDataChannel = pc.createDataChannel('remotex-input', {
-      ordered: true,
-      maxRetransmits: 0
+      ordered: true
     });
     inputDataChannel.onopen = () => {
-      console.log('[Controller] Canal de dados de entrada ativo.');
+      console.log('[Controller] Canal de dados de entrada e vídeo HD ativo.');
       startPingMonitoring();
     };
     inputDataChannel.onmessage = (e) => {
@@ -1364,6 +1407,22 @@
           metricPing.textContent = `${rtt} ms`;
         } else if (data.type === 'native_frame' && data.jpeg) {
           renderIncomingDesktopFrame(data.width, data.height, data.jpeg);
+        } else if (data.type === 'native_frame_chunk') {
+          let entry = incomingFrameChunks.get(data.frameId);
+          if (!entry) {
+            entry = { parts: new Array(data.total), count: 0, width: data.width, height: data.height };
+            incomingFrameChunks.set(data.frameId, entry);
+            if (incomingFrameChunks.size > 6) {
+              const oldest = incomingFrameChunks.keys().next().value;
+              incomingFrameChunks.delete(oldest);
+            }
+          }
+          entry.parts[data.idx] = data.chunk;
+          entry.count++;
+          if (entry.count === data.total) {
+            incomingFrameChunks.delete(data.frameId);
+            renderIncomingDesktopFrame(entry.width, entry.height, entry.parts.join(''));
+          }
         }
       } catch (err) {}
     };
@@ -1760,7 +1819,7 @@
       });
     }, { passive: false });
 
-    // Keyboard Events (captured on videoWrapper and window when sessionOverlay is visible)
+    // Keyboard Events (captured when sessionOverlay is visible — ZERO duplication!)
     window.addEventListener('keydown', (e) => {
       if (!isInputControlEnabled || !activeSessionId) return;
       if (sessionOverlay.classList.contains('hidden')) return;
@@ -1768,25 +1827,31 @@
       if (e.key === 'F12') return;
       e.preventDefault();
 
+      // Printable single characters (letters, numbers, punctuation, symbols) -> send ONLY Unicode 'text'
+      // Do NOT send 'key_down' for printable chars, otherwise Windows types every character twice!
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        sendRemoteControlCommand({
+          type: 'text',
+          text: e.key
+        });
+        return;
+      }
+
+      // Control keys (Backspace, Enter, Tab, Escape, Delete, Arrows) & Keyboard Shortcuts (Ctrl+C, Ctrl+V, Alt+Tab)
       sendRemoteControlCommand({
         type: 'key_down',
         key: e.key,
         code: e.code,
         vkCode: e.keyCode
       });
-
-      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        sendRemoteControlCommand({
-          type: 'text',
-          text: e.key
-        });
-      }
     });
 
     window.addEventListener('keyup', (e) => {
       if (!isInputControlEnabled || !activeSessionId) return;
       if (sessionOverlay.classList.contains('hidden')) return;
       if (document.activeElement === chatInput) return;
+      // Ignore keyup for printable characters that were handled via 'text'
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) return;
       e.preventDefault();
 
       sendRemoteControlCommand({

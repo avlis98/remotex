@@ -13,13 +13,26 @@ const INPUT_EXE_PATH = path.resolve(__dirname, '../../native/RemoteXInput/bin/Re
 let inputProcess = null;
 let stdoutBuffer = '';
 const localClients = new Set();
+let primaryLocalClient = null;
+const processedSeqs = new Set();
+let lastMouseDownAt = 0;
+let lastMouseUpAt = 0;
 
 function broadcastToLocalClients(msgStr) {
+  // Send frames/replies ONLY to the primary active local client so duplicate browser tabs never duplicate traffic
+  if (primaryLocalClient && primaryLocalClient.readyState === WebSocket.OPEN) {
+    try {
+      primaryLocalClient.send(msgStr);
+      return;
+    } catch (e) {}
+  }
   for (const client of localClients) {
     if (client.readyState === WebSocket.OPEN) {
+      primaryLocalClient = client;
       try {
         client.send(msgStr);
       } catch (e) {}
+      break;
     }
   }
 }
@@ -135,10 +148,33 @@ const wss = new WebSocketServer({ port: WS_PORT });
 
 wss.on('connection', (ws) => {
   localClients.add(ws);
+  primaryLocalClient = ws;
 
   ws.on('message', (raw) => {
     try {
       const cmd = JSON.parse(raw.toString());
+      primaryLocalClient = ws;
+
+      // Deduplicate commands by sequence ID so multiple open tabs or dual channels never execute an input twice
+      if (cmd.seq) {
+        if (processedSeqs.has(cmd.seq)) return;
+        processedSeqs.add(cmd.seq);
+        if (processedSeqs.size > 400) {
+          const first = processedSeqs.values().next().value;
+          processedSeqs.delete(first);
+        }
+      }
+
+      // Guard against duplicate simultaneous mouse_down / mouse_up within 18ms from duplicate tabs
+      const now = Date.now();
+      if (cmd.type === 'mouse_down') {
+        if (now - lastMouseDownAt < 18) return;
+        lastMouseDownAt = now;
+      } else if (cmd.type === 'mouse_up') {
+        if (now - lastMouseUpAt < 18) return;
+        lastMouseUpAt = now;
+      }
+
       sendToInputAgent(cmd);
     } catch (e) {
       console.error('[Agent] Erro de comando JSON no input WS:', e);
@@ -147,6 +183,9 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     localClients.delete(ws);
+    if (primaryLocalClient === ws) {
+      primaryLocalClient = localClients.values().next().value || null;
+    }
     if (localClients.size === 0) {
       sendToInputAgent({ type: 'stop_capture' });
     }

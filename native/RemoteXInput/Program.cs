@@ -112,9 +112,9 @@ namespace RemoteX.NativeInput
 
         private static readonly object ConsoleLock = new object();
         private static volatile bool isStreaming = false;
-        private static volatile int targetFps = 12;
-        private static volatile int jpegQuality = 60;
-        private static volatile int maxCaptureWidth = 1366;
+        private static volatile int targetFps = 15;
+        private static volatile int jpegQuality = 82;
+        private static volatile int maxCaptureWidth = 1920;
         private static ImageCodecInfo jpegEncoder = null;
 
         // Native Always-On-Top (TopMost) Chat Window so chat always appears over any open app on the remote PC
@@ -333,7 +333,7 @@ namespace RemoteX.NativeInput
             if (height <= 0) height = 1080;
         }
 
-        private static void MoveCursorNormalized(double normX, double normY)
+        private static void MoveCursorNormalized(double normX, double normY, bool positionOnly = false)
         {
             normX = Math.Max(0.0, Math.Min(1.0, normX));
             normY = Math.Max(0.0, Math.Min(1.0, normY));
@@ -345,10 +345,6 @@ namespace RemoteX.NativeInput
             int targetY = top + (int)Math.Round(normY * (height - 1));
 
             SetCursorPos(targetX, targetY);
-
-            int absX = (int)Math.Round(normX * 65535.0);
-            int absY = (int)Math.Round(normY * 65535.0);
-            SendMouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, absX, absY, 0);
         }
 
         private static void SendMouse(uint flags, int dx = 0, int dy = 0, uint mouseData = 0)
@@ -498,7 +494,9 @@ namespace RemoteX.NativeInput
                             {
                                 using (Graphics gs = Graphics.FromImage(scaledBmp))
                                 {
-                                    gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+                                    gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                                    gs.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                                    gs.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
                                     gs.DrawImage(fullBmp, 0, 0, outW, outH);
                                 }
                                 if (encoder != null) scaledBmp.Save(ms, encoder, encParams);
@@ -709,9 +707,11 @@ namespace RemoteX.NativeInput
                             break;
 
                         case "start_capture":
-                            targetFps = Math.Max(5, Math.Min(30, ExtractInt(line, "fps", 12)));
-                            jpegQuality = Math.Max(30, Math.Min(90, ExtractInt(line, "quality", 60)));
-                            isStreaming = true;
+                        case "set_quality":
+                            targetFps = Math.Max(5, Math.Min(30, ExtractInt(line, "fps", 15)));
+                            jpegQuality = Math.Max(30, Math.Min(95, ExtractInt(line, "quality", 82)));
+                            maxCaptureWidth = Math.Max(1024, Math.Min(3840, ExtractInt(line, "maxWidth", 1920)));
+                            if (type == "start_capture") isStreaming = true;
                             break;
 
                         case "stop_capture":
