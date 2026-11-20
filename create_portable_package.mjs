@@ -8,6 +8,28 @@ const DIST_DIR = path.join(PROJECT_DIR, 'dist');
 const STAGING_DIR = path.join(os.tmpdir(), 'remotex_pkg_stage');
 const ISS_PATH = path.join(os.tmpdir(), 'remotex_installer.iss');
 const ISCC_EXE = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Inno Setup 6', 'ISCC.exe');
+const CSC_EXE = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
+
+console.log('[0/5] Compilando motor nativo Win32 RemoteXInput.exe (100% standalone para qualquer Windows 10/11)...');
+const nativeOutDir = path.join(PROJECT_DIR, 'native', 'RemoteXInput', 'bin', 'Release', 'net8.0');
+fs.mkdirSync(nativeOutDir, { recursive: true });
+for (const oldFile of ['RemoteXInput.dll', 'RemoteXInput.deps.json', 'RemoteXInput.runtimeconfig.json', 'RemoteXInput.pdb']) {
+  const p = path.join(nativeOutDir, oldFile);
+  if (fs.existsSync(p)) {
+    try { fs.unlinkSync(p); } catch {}
+  }
+}
+execFileSync(CSC_EXE, [
+  '/nologo',
+  '/target:exe',
+  '/optimize+',
+  `/out:${path.join(nativeOutDir, 'RemoteXInput.exe')}`,
+  `/win32icon:${path.join(PROJECT_DIR, 'icon.ico')}`,
+  '/r:System.Drawing.dll',
+  '/r:System.Windows.Forms.dll',
+  path.join(PROJECT_DIR, 'native', 'RemoteXInput', 'Program.cs')
+], { stdio: 'inherit' });
+console.log('      RemoteXInput.exe nativo (Screen Capture + Win32 SendInput) compilado com sucesso!');
 
 console.log('[1/5] Compilando assistente grafico C# (Instalar RemoteX.exe)...');
 try {

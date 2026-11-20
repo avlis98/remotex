@@ -7,10 +7,22 @@ const { WebSocketServer, WebSocket } = require('ws');
 const HTTP_PORT = process.env.PORT || 3000;
 const WS_PORT = process.env.INPUT_WS_PORT || 3001;
 
-// Path to compiled native Win32 input agent
+// Path to compiled native Win32 input & screen capture agent (.NET Framework 4.8 native Win32)
 const INPUT_EXE_PATH = path.resolve(__dirname, '../../native/RemoteXInput/bin/Release/net8.0/RemoteXInput.exe');
 
 let inputProcess = null;
+let stdoutBuffer = '';
+const localClients = new Set();
+
+function broadcastToLocalClients(msgStr) {
+  for (const client of localClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(msgStr);
+      } catch (e) {}
+    }
+  }
+}
 
 function startInputAgent() {
   if (!fs.existsSync(INPUT_EXE_PATH)) {
@@ -20,11 +32,21 @@ function startInputAgent() {
 
   try {
     inputProcess = spawn(INPUT_EXE_PATH, [], {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true
     });
 
-    inputProcess.stdout.on('data', (data) => {
-      // console.log(`[InputAgent stdout]: ${data.toString().trim()}`);
+    inputProcess.stdout.on('data', (chunk) => {
+      stdoutBuffer += chunk.toString('utf8');
+      let nlIndex;
+      while ((nlIndex = stdoutBuffer.indexOf('\n')) !== -1) {
+        const line = stdoutBuffer.slice(0, nlIndex).trim();
+        stdoutBuffer = stdoutBuffer.slice(nlIndex + 1);
+        if (!line) continue;
+        if (line.includes('"status":"frame"')) {
+          broadcastToLocalClients(line);
+        }
+      }
     });
 
     inputProcess.stderr.on('data', (data) => {
@@ -32,11 +54,11 @@ function startInputAgent() {
     });
 
     inputProcess.on('exit', (code) => {
-      console.warn(`[InputAgent] Processo encerrou com código ${code}. Reiniciando em 2s...`);
-      setTimeout(startInputAgent, 2000);
+      console.warn(`[InputAgent] Processo encerrou com código ${code}. Reiniciando em 1s...`);
+      setTimeout(startInputAgent, 1000);
     });
 
-    console.log(`[Agent] RemoteX Win32 Input Agent inicializado com sucesso (PID: ${inputProcess.pid}).`);
+    console.log(`[Agent] RemoteX Win32 Native Input & Screen Agent ativo (PID: ${inputProcess.pid}).`);
   } catch (err) {
     console.error('[Agent] Falha ao iniciar RemoteXInput.exe:', err);
   }
@@ -52,7 +74,7 @@ function sendToInputAgent(commandObj) {
   }
 }
 
-// Start native Win32 input worker
+// Start native Win32 worker
 startInputAgent();
 
 // Static file HTTP server
@@ -62,11 +84,11 @@ const MIME_TYPES = {
   '.js': 'application/javascript; charset=UTF-8',
   '.json': 'application/json; charset=UTF-8',
   '.png': 'image/png',
+  '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml'
 };
 
 const server = http.createServer((req, res) => {
-  // Simple API routes
   if (req.url === '/api/info') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -79,20 +101,17 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // System restart endpoint (authenticated)
   if (req.url === '/api/system/restart' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       console.log('[Agent] Comando de reinicialização remota recebido com autorização.');
-      // Na etapa 1 apenas registramos o evento seguro
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok', message: 'Comando de reinicialização processado.' }));
     });
     return;
   }
 
-  // Static files in ./public
   let reqPath = req.url.split('?')[0];
   if (reqPath === '/' || reqPath === '') reqPath = '/index.html';
   const filePath = path.join(__dirname, 'public', reqPath);
@@ -111,11 +130,11 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// WebSocket Server for Local Host Input Injection
+// WebSocket Server for Local Host Input Injection & Native Screen Capture Stream
 const wss = new WebSocketServer({ port: WS_PORT });
 
 wss.on('connection', (ws) => {
-  // console.log('[Agent] Conexão local de injeção de entrada estabelecida.');
+  localClients.add(ws);
 
   ws.on('message', (raw) => {
     try {
@@ -125,14 +144,20 @@ wss.on('connection', (ws) => {
       console.error('[Agent] Erro de comando JSON no input WS:', e);
     }
   });
+
+  ws.on('close', () => {
+    localClients.delete(ws);
+    if (localClients.size === 0) {
+      sendToInputAgent({ type: 'stop_capture' });
+    }
+  });
 });
 
 server.listen(HTTP_PORT, () => {
   console.log(`=======================================================`);
-  console.log(`  RemoteX Desktop Client & Agent Ativo!`);
+  console.log(`  RemoteX Desktop Client & Win32 Full Control Agent!`);
   console.log(`  Painel Local: http://localhost:${HTTP_PORT}`);
-  console.log(`  Input WebSocket: ws://localhost:${WS_PORT}`);
-  console.log(`  Native Win32 Input: ${inputProcess ? 'ATIVO (SendInput)' : 'OFFLINE'}`);
+  console.log(`  Input & Capture WebSocket: ws://localhost:${WS_PORT}`);
+  console.log(`  Native Win32 Input/Screen: ${inputProcess ? 'ATIVO' : 'OFFLINE'}`);
   console.log(`=======================================================`);
 });
-

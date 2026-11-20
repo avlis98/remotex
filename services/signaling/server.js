@@ -318,10 +318,11 @@ function handleGlobalMeshMessage(topic, msg) {
         }
 
         const providedPassword = String(msg.password || '').trim();
-        const isTempPasswordValid = targetHost.password && targetHost.password === providedPassword;
-        const isUnattendedValid = targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
+        const isTempPasswordValid = providedPassword && targetHost.password && targetHost.password === providedPassword;
+        const isUnattendedValid = providedPassword && targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
 
-        if (!isTempPasswordValid && !isUnattendedValid) {
+        // If password was typed but is wrong (and not empty interactive approval request)
+        if (providedPassword && !isTempPasswordValid && !isUnattendedValid) {
           globalMesh.publish(`remotex/v1/node/${msg.clientNodeId}`, {
             meshType: 'mesh_connect_error',
             sessionId: msg.sessionId,
@@ -342,9 +343,27 @@ function handleGlobalMeshMessage(topic, msg) {
           startedAt: new Date()
         });
 
+        // If no password was entered, ask the Host PC user to click "Aceitar (Controle Total)" like AnyDesk!
+        if (!providedPassword) {
+          send(targetHost.ws, {
+            type: 'incoming_approval_request',
+            sessionId: msg.sessionId,
+            fromClient: msg.clientInfo || { hostname: 'Controlador RemoteX', deviceId: msg.clientId }
+          });
+          globalMesh.publish(`remotex/v1/node/${msg.clientNodeId}`, {
+            meshType: 'mesh_waiting_approval',
+            sessionId: msg.sessionId,
+            targetDeviceId: targetId
+          });
+          console.log(`[GlobalMesh] Aguardando aceite manual no Host ${targetId} para sessão ${msg.sessionId}`);
+          return;
+        }
+
+        // Password matched -> Instant Full Control!
         send(targetHost.ws, {
           type: 'incoming_connection',
           sessionId: msg.sessionId,
+          autoAccepted: true,
           fromClient: msg.clientInfo || { hostname: 'RemoteX Controller' }
         });
 
@@ -356,6 +375,31 @@ function handleGlobalMeshMessage(topic, msg) {
           iceServers: PUBLIC_ICE_SERVERS
         });
         console.log(`[GlobalMesh] Sessão remota autorizada no Host: ${msg.sessionId} (Target: ${targetId})`);
+        break;
+      }
+
+      case 'mesh_waiting_approval': {
+        const sess = sessions.get(msg.sessionId);
+        if (!sess || !sess.clientWs) return;
+        // Extend timeout to 45s while waiting for human approval on the other PC
+        if (sess.pendingTimeout) {
+          clearTimeout(sess.pendingTimeout);
+          sess.pendingTimeout = setTimeout(() => {
+            if (sessions.has(msg.sessionId)) {
+              sessions.delete(msg.sessionId);
+              send(sess.clientWs, {
+                type: 'connect_error',
+                code: 'APPROVAL_TIMEOUT',
+                message: 'Tempo esgotado aguardando o outro computador aceitar a conexão.'
+              });
+            }
+          }, 45000);
+        }
+        send(sess.clientWs, {
+          type: 'waiting_host_approval',
+          sessionId: msg.sessionId,
+          targetDeviceId: msg.targetDeviceId
+        });
         break;
       }
 
@@ -460,10 +504,10 @@ wss.on('connection', (ws, req) => {
           const targetHost = devices.get(targetId);
           // 1. If target host is on this same signaling server, connect directly
           if (targetHost && targetHost.ws.readyState === WebSocket.OPEN) {
-            const isTempPasswordValid = targetHost.password && targetHost.password === providedPassword;
-            const isUnattendedValid = targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
+            const isTempPasswordValid = providedPassword && targetHost.password && targetHost.password === providedPassword;
+            const isUnattendedValid = providedPassword && targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
 
-            if (!isTempPasswordValid && !isUnattendedValid) {
+            if (providedPassword && !isTempPasswordValid && !isUnattendedValid) {
               send(ws, {
                 type: 'connect_error',
                 code: 'INVALID_PASSWORD',
@@ -484,9 +528,24 @@ wss.on('connection', (ws, req) => {
               startedAt: new Date()
             });
 
+            if (!providedPassword) {
+              send(targetHost.ws, {
+                type: 'incoming_approval_request',
+                sessionId,
+                fromClient: data.clientInfo || { hostname: 'Controlador RemoteX', deviceId: boundDeviceId }
+              });
+              send(ws, {
+                type: 'waiting_host_approval',
+                sessionId,
+                targetDeviceId: targetId
+              });
+              return;
+            }
+
             send(targetHost.ws, {
               type: 'incoming_connection',
               sessionId,
+              autoAccepted: true,
               fromClient: data.clientInfo || { hostname: 'Remote Controller' }
             });
 
@@ -544,6 +603,81 @@ wss.on('connection', (ws, req) => {
             clientInfo: data.clientInfo || { hostname: 'RemoteX Controller' }
           });
           console.log(`[GlobalMesh] Buscando computador remoto ${targetId} na rede global...`);
+          break;
+        }
+
+        // Host manual approval response ("Aceitar Conexão -> Controle Total")
+        case 'host_approval_response': {
+          const { sessionId, accepted } = data;
+          const sess = sessions.get(sessionId);
+          if (!sess) break;
+
+          if (!accepted) {
+            if (sess.clientWs) {
+              send(sess.clientWs, {
+                type: 'connect_error',
+                code: 'HOST_REJECTED',
+                message: 'A solicitação de conexão foi recusada pelo computador remoto.'
+              });
+            } else if (sess.remoteNodeId) {
+              globalMesh.publish(`remotex/v1/node/${sess.remoteNodeId}`, {
+                meshType: 'mesh_connect_error',
+                sessionId,
+                code: 'HOST_REJECTED',
+                message: 'A solicitação de conexão foi recusada pelo computador remoto.'
+              });
+            }
+            sessions.delete(sessionId);
+            break;
+          }
+
+          // Accepted! Start Full Control on Host & notify Client
+          if (sess.hostWs) {
+            send(sess.hostWs, {
+              type: 'incoming_connection',
+              sessionId,
+              autoAccepted: true,
+              fromClient: { hostname: 'RemoteX Controller' }
+            });
+          }
+
+          if (sess.clientWs) {
+            send(sess.clientWs, {
+              type: 'connect_accepted',
+              sessionId,
+              targetDeviceId: sess.hostId,
+              iceServers: PUBLIC_ICE_SERVERS
+            });
+          } else if (sess.remoteNodeId) {
+            globalMesh.publish(`remotex/v1/node/${sess.remoteNodeId}`, {
+              meshType: 'mesh_connect_accepted',
+              sessionId,
+              targetDeviceId: sess.hostId,
+              hostNodeId: NODE_ID,
+              iceServers: PUBLIC_ICE_SERVERS
+            });
+          }
+          console.log(`[Signaling] Host aceitou conexão com Controle Total: ${sessionId}`);
+          break;
+        }
+
+        // High-speed Screen Frame & Input Relay fallback (guarantees 100% control across any NAT/Firewall)
+        case 'relay_frame':
+        case 'relay_input':
+        case 'relay_chat': {
+          const { sessionId } = data;
+          const sess = sessions.get(sessionId);
+          if (!sess) break;
+          if (sess.clientWs && sess.hostWs) {
+            const recipient = (ws === sess.clientWs) ? sess.hostWs : sess.clientWs;
+            send(recipient, data);
+          } else if (sess.remoteNodeId) {
+            globalMesh.publish(`remotex/v1/node/${sess.remoteNodeId}`, {
+              meshType: 'mesh_signal',
+              sessionId,
+              payload: data
+            });
+          }
           break;
         }
 

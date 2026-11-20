@@ -96,12 +96,16 @@
   // Session Viewer DOM Elements
   const sessionOverlay = document.getElementById('session-overlay');
   const remoteVideo = document.getElementById('remote-video');
+  const remoteCanvas = document.getElementById('remote-canvas');
+  const videoWrapper = document.getElementById('video-wrapper');
   const videoLoader = document.getElementById('video-loader');
   const sessionTargetName = document.getElementById('session-target-name');
   const sessionStatusDot = document.getElementById('session-status-dot');
   const metricPing = document.getElementById('metric-ping');
   const metricResolution = document.getElementById('metric-resolution');
   const reconnectingOverlay = document.getElementById('reconnecting-overlay');
+  let pendingApprovalSessionId = null;
+  let lastRelayFrameSentAt = 0;
 
   // Toolbar Actions
   const btnMonitors = document.getElementById('btn-monitors');
@@ -389,13 +393,62 @@
     const btnCloseAuthModal = document.getElementById('btn-close-auth-modal');
     const btnCancelAuthModal = document.getElementById('btn-cancel-auth-modal');
     const btnSaveOnlyAuthModal = document.getElementById('btn-save-only-auth-modal');
+    const btnRequestApprovalModal = document.getElementById('btn-request-approval-modal');
     const btnAddFavoriteDevice = document.getElementById('btn-add-favorite-device');
+    const incomingApprovalModal = document.getElementById('incoming-approval-modal');
+    const btnAcceptIncoming = document.getElementById('btn-accept-incoming');
+    const btnRejectIncoming = document.getElementById('btn-reject-incoming');
 
     function closeAuthModal() {
       if (authModal) authModal.classList.add('hidden');
     }
     if (btnCloseAuthModal) btnCloseAuthModal.addEventListener('click', closeAuthModal);
     if (btnCancelAuthModal) btnCancelAuthModal.addEventListener('click', closeAuthModal);
+
+    // Connect without password -> sends approval request to the remote PC ("Aceitar Conexão -> Controle Total")
+    if (btnRequestApprovalModal) {
+      btnRequestApprovalModal.addEventListener('click', () => {
+        const tId = targetIdFormat(authModalDeviceId.value.trim());
+        const alias = authModalAlias.value.trim();
+        if (!tId || tId.replace(/\D/g, '').length < 9) {
+          alert('Digite um ID válido de 9 dígitos.');
+          return;
+        }
+        if (alias) upsertSavedDevice(tId, { alias });
+        remoteDeviceIdInput.value = tId;
+        remotePasswordInput.value = '';
+        closeAuthModal();
+        startRemoteConnection(false, true);
+      });
+    }
+
+    // Remote Host PC clicks "Aceitar (Controle Total)"
+    if (btnAcceptIncoming) {
+      btnAcceptIncoming.addEventListener('click', () => {
+        if (incomingApprovalModal) incomingApprovalModal.classList.add('hidden');
+        if (pendingApprovalSessionId && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
+          signalingWs.send(JSON.stringify({
+            type: 'host_approval_response',
+            sessionId: pendingApprovalSessionId,
+            accepted: true
+          }));
+        }
+      });
+    }
+
+    if (btnRejectIncoming) {
+      btnRejectIncoming.addEventListener('click', () => {
+        if (incomingApprovalModal) incomingApprovalModal.classList.add('hidden');
+        if (pendingApprovalSessionId && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
+          signalingWs.send(JSON.stringify({
+            type: 'host_approval_response',
+            sessionId: pendingApprovalSessionId,
+            accepted: false
+          }));
+        }
+        pendingApprovalSessionId = null;
+      });
+    }
 
     if (btnSaveOnlyAuthModal) {
       btnSaveOnlyAuthModal.addEventListener('click', () => {
@@ -644,11 +697,11 @@
     btnSyncClipboard.addEventListener('click', async () => {
       try {
         const text = await navigator.clipboard.readText();
-        if (text && inputDataChannel && inputDataChannel.readyState === 'open') {
-          inputDataChannel.send(JSON.stringify({
+        if (text) {
+          sendRemoteControlCommand({
             type: 'clipboard_sync',
             text
-          }));
+          });
           alert('Área de transferência sincronizada com o computador remoto.');
         } else {
           alert('Área de transferência local vazia.');
@@ -660,14 +713,54 @@
 
     btnRestartRemote.addEventListener('click', () => {
       if (confirm('Deseja realmente solicitar a reinicialização do computador remoto?')) {
-        if (inputDataChannel && inputDataChannel.readyState === 'open') {
-          inputDataChannel.send(JSON.stringify({ type: 'restart_request' }));
-          alert('Solicitação de reinicialização enviada.');
-        }
+        sendRemoteControlCommand({ type: 'restart_request' });
+        alert('Solicitação de reinicialização enviada.');
       }
     });
 
     setupRemoteInputCapture();
+  }
+
+  function sendRemoteControlCommand(cmd) {
+    if (inputDataChannel && inputDataChannel.readyState === 'open') {
+      try {
+        inputDataChannel.send(JSON.stringify(cmd));
+        return;
+      } catch (e) {}
+    }
+    if (activeSessionId && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
+      signalingWs.send(JSON.stringify({
+        type: 'relay_input',
+        sessionId: activeSessionId,
+        cmd
+      }));
+    }
+  }
+
+  let hasCapturedCanvasThumb = false;
+  function renderIncomingDesktopFrame(width, height, jpegB64) {
+    if (!remoteCanvas) return;
+    const img = new Image();
+    img.onload = () => {
+      if (remoteCanvas.width !== img.width || remoteCanvas.height !== img.height) {
+        remoteCanvas.width = img.width;
+        remoteCanvas.height = img.height;
+      }
+      const ctx = remoteCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      remoteCanvas.classList.remove('hidden');
+      videoLoader.classList.add('hidden');
+      if (metricResolution) {
+        metricResolution.textContent = `${width || img.width}x${height || img.height} | Controle Total Ativo`;
+      }
+      if (!hasCapturedCanvasThumb && remoteDeviceIdInput.value) {
+        hasCapturedCanvasThumb = true;
+        try {
+          upsertSavedDevice(remoteDeviceIdInput.value, { thumbnail: `data:image/jpeg;base64,${jpegB64}` });
+        } catch (e) {}
+      }
+    };
+    img.src = `data:image/jpeg;base64,${jpegB64}`;
   }
 
   function generateRandomPassword() {
@@ -679,15 +772,46 @@
     return `${p1}-${p2}`;
   }
 
-  // Local Input Agent (Win32 SendInput Worker)
+  // Local Input & Native Desktop Capture Agent (Win32 SendInput + CopyFromScreen Worker)
   function connectToLocalInputAgent() {
     try {
       localInputWs = new WebSocket(LOCAL_INPUT_WS_URL);
       localInputWs.onopen = () => {
-        console.log('[RemoteX] Conectado ao agente nativo de entrada Win32.');
+        console.log('[RemoteX] Conectado ao agente nativo Win32 (SendInput + Screen Capture).');
+      };
+      localInputWs.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data);
+          if (data.status === 'frame' && activeSessionId) {
+            const framePacket = {
+              type: 'native_frame',
+              width: data.width,
+              height: data.height,
+              jpeg: data.jpeg
+            };
+            // Prefer WebRTC DataChannel if open, otherwise stream via Signaling/Global Mesh relay
+            if (inputDataChannel && inputDataChannel.readyState === 'open') {
+              if (inputDataChannel.bufferedAmount < 512 * 1024) {
+                inputDataChannel.send(JSON.stringify(framePacket));
+              }
+            } else if (signalingWs && signalingWs.readyState === WebSocket.OPEN) {
+              const now = performance.now();
+              if (now - lastRelayFrameSentAt >= 95) {
+                lastRelayFrameSentAt = now;
+                signalingWs.send(JSON.stringify({
+                  type: 'relay_frame',
+                  sessionId: activeSessionId,
+                  width: data.width,
+                  height: data.height,
+                  jpeg: data.jpeg
+                }));
+              }
+            }
+          }
+        } catch (e) {}
       };
       localInputWs.onclose = () => {
-        setTimeout(connectToLocalInputAgent, 3000);
+        setTimeout(connectToLocalInputAgent, 2000);
       };
     } catch (e) {
       console.warn('[RemoteX] Agente local offline:', e);
@@ -797,7 +921,28 @@
         resetConnectButton();
         break;
 
+      case 'waiting_host_approval':
+        showConnectError('Solicitação enviada! Aguardando o outro computador clicar em "Aceitar (Controle Total)"...');
+        break;
+
+      case 'incoming_approval_request': {
+        pendingApprovalSessionId = msg.sessionId;
+        const incomingModal = document.getElementById('incoming-approval-modal');
+        const incomingDesc = document.getElementById('incoming-approval-desc');
+        if (incomingDesc && msg.fromClient) {
+          const fromLabel = msg.fromClient.deviceId
+            ? `${msg.fromClient.hostname || 'Controlador'} (${msg.fromClient.deviceId})`
+            : (msg.fromClient.hostname || 'Controlador RemoteX');
+          incomingDesc.innerHTML = `<strong>${escapeHtml(fromLabel)}</strong> está solicitando acesso a este computador. Ao aceitar, o controlador terá <strong>Controle Total</strong>:`;
+        }
+        if (incomingModal) incomingModal.classList.remove('hidden');
+        try { window.focus(); } catch (e) {}
+        break;
+      }
+
       case 'connect_accepted':
+        clearConnectError();
+        hasCapturedCanvasThumb = false;
         activeSessionId = msg.sessionId;
         saveRecentDevice(msg.targetDeviceId);
         await setupClientPeerConnection(msg.targetDeviceId, msg.iceServers);
@@ -808,9 +953,31 @@
         await handleIncomingHostSession(msg.sessionId, msg.fromClient);
         break;
 
+      case 'relay_frame':
+        if (msg.jpeg) {
+          renderIncomingDesktopFrame(msg.width, msg.height, msg.jpeg);
+        }
+        break;
+
+      case 'relay_input':
+        if (msg.cmd) {
+          handleHostControlCommand(msg.cmd);
+        }
+        break;
+
+      case 'relay_chat':
+        if (msg.text) {
+          appendChatMessage(msg.text, 'incoming', msg.timestamp);
+          if (!isChatOpen) {
+            unreadChatCount++;
+            chatBadge.textContent = unreadChatCount;
+            chatBadge.classList.remove('hidden');
+          }
+        }
+        break;
+
       case 'sdp_offer':
-        if (!peerConnection || !hostMediaStream) {
-          console.log('[Host] Oferta SDP recebida antes da inicialização completa. Enfileirando...');
+        if (!peerConnection) {
           pendingOffer = {
             sessionId: msg.sessionId,
             sdp: msg.sdp,
@@ -883,14 +1050,24 @@
     }
   }
 
-  // Host Mode: Handle incoming connection request
+  // Host Mode: Handle incoming connection request -> Instant Full Control via Native Win32 Agent
   async function handleIncomingHostSession(sessionId, fromClient) {
     activeSessionId = sessionId;
     pendingIceCandidates = [];
-    pendingOffer = null;
     hostActiveNotice.classList.remove('hidden');
+    btnStartHostScreen.classList.add('active');
+    hostStreamLabel.textContent = 'Controle Total Ativo';
 
-    // 1. Criar PeerConnection imediatamente para preparar canais e receber candidatos
+    // 1. Iniciar imediatamente captura de tela nativa Win32 (sem depender de popup getDisplayMedia do navegador!)
+    if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+      localInputWs.send(JSON.stringify({
+        type: 'start_capture',
+        fps: 12,
+        quality: 58
+      }));
+    }
+
+    // 2. Criar PeerConnection imediatamente para preparar canais e receber candidatos
     const pc = new RTCPeerConnection({
       iceServers: DEFAULT_ICE_SERVERS
     });
@@ -923,49 +1100,41 @@
       }
     };
 
-    // 2. Garantir captura de tela do host
-    const stream = await ensureHostScreenCapture();
-    if (!stream) {
-      signalingWs.send(JSON.stringify({
-        type: 'end_session',
-        sessionId,
-        reason: 'O host não concedeu permissão para compartilhar a tela.'
-      }));
-      endSessionLocally();
-      return;
+    // 3. Se o host já tiver stream de vídeo WebRTC pré-autorizado, anexa; caso contrário usa o stream nativo Win32 sem bloquear!
+    if (hostMediaStream && hostMediaStream.active) {
+      hostMediaStream.getTracks().forEach(track => {
+        if ('contentHint' in track) track.contentHint = 'motion';
+        pc.addTrack(track, hostMediaStream);
+      });
     }
 
-    // 3. Adicionar tracks de vídeo à conexão
-    stream.getTracks().forEach(track => {
-      if ('contentHint' in track) track.contentHint = 'motion';
-      pc.addTrack(track, stream);
-    });
-
-    // 4. Se a oferta SDP já chegou enquanto o usuário selecionava a tela, processar imediatamente
+    // 4. Processar oferta SDP imediatamente
     if (pendingOffer) {
-      console.log('[Host] Processando oferta SDP que estava na fila...');
       const offerToProcess = pendingOffer;
       pendingOffer = null;
       await processSdpOffer(offerToProcess.sessionId, offerToProcess.sdp, offerToProcess.fromDeviceId);
     }
   }
 
-  // Auto Reconnection Handler
-  function setupPeerConnectionAutoReconnect(pc) {
-    pc.oniceconnectionstatechange = () => {
-      const state = pc.iceConnectionState;
-      console.log(`[WebRTC] ICE Connection State: ${state}`);
-      if (state === 'disconnected') {
-        reconnectingOverlay.classList.remove('hidden');
-        sessionStatusDot.classList.add('warning');
-      } else if (state === 'connected' || state === 'completed') {
-        reconnectingOverlay.classList.add('hidden');
-        sessionStatusDot.classList.remove('warning');
-      } else if (state === 'failed') {
-        reconnectingOverlay.querySelector('span').textContent = 'Tentando reiniciar ICE...';
-        pc.restartIce();
+  function handleHostControlCommand(cmd) {
+    if (!cmd) return;
+    if (cmd.type === 'clipboard_sync') {
+      navigator.clipboard.writeText(cmd.text).catch(() => {});
+    }
+    if (cmd.type === 'switch_monitor') {
+      if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+        localInputWs.send(JSON.stringify({ type: 'capture_frame' }));
       }
-    };
+      return;
+    }
+    if (cmd.type === 'restart_request') {
+      fetch('/api/system/restart', { method: 'POST' }).catch(() => {});
+      return;
+    }
+    // Forward mouse, keyboard & clipboard directly to local Win32 SendInput agent
+    if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+      localInputWs.send(JSON.stringify(cmd));
+    }
   }
 
   // Host Mode: Handle input commands received from remote controller
@@ -977,29 +1146,7 @@
           channel.send(JSON.stringify({ type: 'pong', sendTime: cmd.sendTime }));
           return;
         }
-
-        if (cmd.type === 'clipboard_sync') {
-          console.log('[Host] Clipboard sync recebido:', cmd.text);
-          navigator.clipboard.writeText(cmd.text).catch(() => {});
-          return;
-        }
-
-        if (cmd.type === 'switch_monitor') {
-          console.log('[Host] Solicitação de alternância de tela para:', cmd.target);
-          ensureHostScreenCapture();
-          return;
-        }
-
-        if (cmd.type === 'restart_request') {
-          console.warn('[Host] Comando de reinicialização remota autorizado.');
-          fetch('/api/system/restart', { method: 'POST' }).catch(() => {});
-          return;
-        }
-
-        // Forward mouse & keyboard directly to local Win32 SendInput agent
-        if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
-          localInputWs.send(JSON.stringify(cmd));
-        }
+        handleHostControlCommand(cmd);
       } catch (e) {
         console.error('[Host] Erro ao processar comando de entrada:', e);
       }
@@ -1115,11 +1262,23 @@
     }, 60);
   }
 
+  // Auto Reconnection Handler
+  function setupPeerConnectionAutoReconnect(pc) {
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
+      console.log(`[WebRTC] ICE Connection State: ${state}`);
+      if (state === 'Connected' || state === 'connected' || state === 'completed') {
+        reconnectingOverlay.classList.add('hidden');
+        sessionStatusDot.classList.remove('warning');
+      }
+    };
+  }
+
   // Client/Viewer Mode: Initiate connection to target
-  function startRemoteConnection(openFilesAfterConnect = false) {
+  function startRemoteConnection(openFilesAfterConnect = false, forceApprovalRequest = false) {
     clearConnectError();
     const targetId = targetIdFormat(remoteDeviceIdInput.value.trim());
-    let password = remotePasswordInput.value.trim();
+    let password = forceApprovalRequest ? '' : remotePasswordInput.value.trim();
 
     if (!targetId || targetId.replace(/\D/g, '').length < 9) {
       showConnectError('Insira um endereço remoto válido (9 dígitos).');
@@ -1127,16 +1286,14 @@
       return;
     }
 
-    // Check if we have a saved password for this device
-    if (!password) {
+    // Check if we have a saved password for this device (unless user explicitly requested interactive approval)
+    if (!password && !forceApprovalRequest) {
       const map = getSavedDevicesMap();
       if (map[targetId] && map[targetId].savedPassword) {
         password = map[targetId].savedPassword;
         remotePasswordInput.value = password;
-      } else {
-        openAuthModal(targetId);
-        return;
       }
+      // Note: If no password is entered, we connect directly in AnyDesk Approval Mode (prompts "Aceitar (Controle Total)" on the other PC!)
     }
 
     pendingAutoOpenFiles = !!openFilesAfterConnect;
@@ -1146,7 +1303,7 @@
       type: 'connect_request',
       targetDeviceId: targetId,
       password: password,
-      clientInfo: { hostname: 'RemoteX Controller' }
+      clientInfo: { hostname: 'Controlador RemoteX', deviceId: myDeviceId }
     }));
   }
 
@@ -1189,6 +1346,8 @@
         if (data.type === 'pong') {
           const rtt = Math.round(performance.now() - data.sendTime);
           metricPing.textContent = `${rtt} ms`;
+        } else if (data.type === 'native_frame' && data.jpeg) {
+          renderIncomingDesktopFrame(data.width, data.height, data.jpeg);
         }
       } catch (err) {}
     };
@@ -1287,17 +1446,24 @@
   function sendChatMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     if (chatDataChannel && chatDataChannel.readyState === 'open') {
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       chatDataChannel.send(JSON.stringify({
         type: 'chat_message',
         text,
         timestamp: timeStr
       }));
-      appendChatMessage(text, 'outgoing', timeStr);
-      chatInput.value = '';
+    } else if (activeSessionId && signalingWs && signalingWs.readyState === WebSocket.OPEN) {
+      signalingWs.send(JSON.stringify({
+        type: 'relay_chat',
+        sessionId: activeSessionId,
+        text,
+        timestamp: timeStr
+      }));
     }
+    appendChatMessage(text, 'outgoing', timeStr);
+    chatInput.value = '';
   }
 
   function appendChatMessage(text, direction, timeStr) {
@@ -1475,98 +1641,122 @@
     }, 1000);
   }
 
-  // Interactive Remote Mouse and Keyboard Input Capture
+  // Interactive Remote Mouse and Keyboard Input Capture (Works on both Native Canvas & WebRTC Video, over P2P or Global Mesh)
   function setupRemoteInputCapture() {
     let lastMoveTime = 0;
 
-    // Mouse Move (Throttled to 60hz for smooth transmission)
-    remoteVideo.addEventListener('mousemove', (e) => {
-      if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
+    function getActiveSurface() {
+      if (remoteCanvas && !remoteCanvas.classList.contains('hidden')) return remoteCanvas;
+      return remoteVideo;
+    }
 
-      const now = performance.now();
-      if (now - lastMoveTime < 14) return; // ~70fps cap
-      lastMoveTime = now;
-
-      const rect = remoteVideo.getBoundingClientRect();
+    function computeNormalizedCoords(e) {
+      const surface = getActiveSurface();
+      const rect = surface.getBoundingClientRect();
+      if (!rect.width || !rect.height) return { x: 0.5, y: 0.5 };
       const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       const normY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+      return { x: normX, y: normY };
+    }
 
-      inputDataChannel.send(JSON.stringify({
+    const targetSurface = videoWrapper || remoteVideo;
+
+    // Mouse Move (Throttled to ~45Hz for smooth transmission across both P2P and Global Mesh)
+    targetSurface.addEventListener('mousemove', (e) => {
+      if (!isInputControlEnabled || !activeSessionId) return;
+
+      const now = performance.now();
+      const minInterval = (inputDataChannel && inputDataChannel.readyState === 'open') ? 16 : 35;
+      if (now - lastMoveTime < minInterval) return;
+      lastMoveTime = now;
+
+      const coords = computeNormalizedCoords(e);
+      sendRemoteControlCommand({
         type: 'mouse_move',
-        x: normX,
-        y: normY
-      }));
+        x: coords.x,
+        y: coords.y
+      });
     });
 
-    // Mouse Down
-    remoteVideo.addEventListener('mousedown', (e) => {
-      if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
+    // Mouse Down (includes exact click coordinates so clicks & drags always land at the exact spot)
+    targetSurface.addEventListener('mousedown', (e) => {
+      if (!isInputControlEnabled || !activeSessionId) return;
       e.preventDefault();
-      remoteVideo.focus();
+      targetSurface.focus();
 
-      inputDataChannel.send(JSON.stringify({
+      const coords = computeNormalizedCoords(e);
+      sendRemoteControlCommand({
         type: 'mouse_down',
-        button: e.button
-      }));
+        button: e.button,
+        x: coords.x,
+        y: coords.y
+      });
     });
 
     // Mouse Up
-    remoteVideo.addEventListener('mouseup', (e) => {
-      if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
+    targetSurface.addEventListener('mouseup', (e) => {
+      if (!isInputControlEnabled || !activeSessionId) return;
       e.preventDefault();
 
-      inputDataChannel.send(JSON.stringify({
+      const coords = computeNormalizedCoords(e);
+      sendRemoteControlCommand({
         type: 'mouse_up',
-        button: e.button
-      }));
+        button: e.button,
+        x: coords.x,
+        y: coords.y
+      });
     });
 
-    remoteVideo.addEventListener('contextmenu', (e) => {
+    targetSurface.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
 
     // Mouse Wheel
-    remoteVideo.addEventListener('wheel', (e) => {
-      if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
+    targetSurface.addEventListener('wheel', (e) => {
+      if (!isInputControlEnabled || !activeSessionId) return;
       e.preventDefault();
 
-      inputDataChannel.send(JSON.stringify({
+      sendRemoteControlCommand({
         type: 'mouse_wheel',
         deltaY: e.deltaY > 0 ? 120 : -120
-      }));
+      });
     }, { passive: false });
 
-    // Keyboard Events
-    remoteVideo.addEventListener('keydown', (e) => {
-      if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
+    // Keyboard Events (captured on videoWrapper and window when sessionOverlay is visible)
+    window.addEventListener('keydown', (e) => {
+      if (!isInputControlEnabled || !activeSessionId) return;
+      if (sessionOverlay.classList.contains('hidden')) return;
+      if (document.activeElement === chatInput) return;
       if (e.key === 'F12') return;
       e.preventDefault();
 
-      inputDataChannel.send(JSON.stringify({
+      sendRemoteControlCommand({
         type: 'key_down',
         key: e.key,
         code: e.code,
         vkCode: e.keyCode
-      }));
+      });
 
-      if (e.key.length === 1 && !e.ctrlKey && !e.altKey) {
-        inputDataChannel.send(JSON.stringify({
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        sendRemoteControlCommand({
           type: 'text',
           text: e.key
-        }));
+        });
       }
     });
 
-    remoteVideo.addEventListener('keyup', (e) => {
-      if (!isInputControlEnabled || !inputDataChannel || inputDataChannel.readyState !== 'open') return;
+    window.addEventListener('keyup', (e) => {
+      if (!isInputControlEnabled || !activeSessionId) return;
+      if (sessionOverlay.classList.contains('hidden')) return;
+      if (document.activeElement === chatInput) return;
       e.preventDefault();
 
-      inputDataChannel.send(JSON.stringify({
+      sendRemoteControlCommand({
         type: 'key_up',
         key: e.key,
         code: e.code,
         vkCode: e.keyCode
-      }));
+      });
     });
   }
 
@@ -1671,8 +1861,14 @@
       fileDataChannel = null;
     }
     activeSessionId = null;
+    if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
+      localInputWs.send(JSON.stringify({ type: 'stop_capture' }));
+    }
     sessionOverlay.classList.add('hidden');
+    if (remoteCanvas) remoteCanvas.classList.add('hidden');
     hostActiveNotice.classList.add('hidden');
+    btnStartHostScreen.classList.remove('active');
+    hostStreamLabel.textContent = 'Compartilhar Tela';
     fileModal.classList.add('hidden');
     chatDrawer.classList.add('hidden');
     remoteVideo.srcObject = null;
