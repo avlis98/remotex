@@ -32,6 +32,54 @@ namespace RemoteX.NativeInput
         [DllImport("user32.dll")]
         private static extern bool DrawIcon(IntPtr hDC, int X, int Y, IntPtr hIcon);
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        private const int SW_MINIMIZE = 6;
+
+        private static void MinimizeRemoteXWindow()
+        {
+            try
+            {
+                bool found = false;
+                EnumWindows((hWnd, lParam) =>
+                {
+                    if (!IsWindowVisible(hWnd)) return true;
+                    StringBuilder sb = new StringBuilder(256);
+                    GetWindowText(hWnd, sb, 256);
+                    string title = sb.ToString();
+                    if (!string.IsNullOrEmpty(title) && title.IndexOf("RemoteX", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        title.IndexOf("Chat da Sess", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        ShowWindow(hWnd, SW_MINIMIZE);
+                        found = true;
+                    }
+                    return true;
+                }, IntPtr.Zero);
+
+                if (!found)
+                {
+                    IntPtr fg = GetForegroundWindow();
+                    if (fg != IntPtr.Zero) ShowWindow(fg, SW_MINIMIZE);
+                }
+            }
+            catch { }
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
         {
@@ -716,6 +764,10 @@ namespace RemoteX.NativeInput
 
                         case "stop_capture":
                             isStreaming = false;
+                            break;
+
+                        case "minimize_window":
+                            MinimizeRemoteXWindow();
                             break;
 
                         case "capture_frame":

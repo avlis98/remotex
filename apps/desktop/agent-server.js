@@ -49,20 +49,12 @@ let lastMouseDownAt = 0;
 let lastMouseUpAt = 0;
 
 function broadcastToLocalClients(msgStr) {
-  // Send frames/replies ONLY to the primary active local client so duplicate browser tabs never duplicate traffic
-  if (primaryLocalClient && primaryLocalClient.readyState === WebSocket.OPEN) {
-    try {
-      primaryLocalClient.send(msgStr);
-      return;
-    } catch (e) {}
-  }
+  // Broadcast to all connected local clients (both signaling server Node bridge and local UI)
   for (const client of localClients) {
     if (client.readyState === WebSocket.OPEN) {
-      primaryLocalClient = client;
       try {
         client.send(msgStr);
       } catch (e) {}
-      break;
     }
   }
 }
@@ -178,6 +170,13 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ status: 'error' }));
       }
     });
+    return;
+  }
+
+  if (req.url === '/api/system/minimize' && req.method === 'POST') {
+    sendToInputAgent({ type: 'minimize_window' });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok' }));
     return;
   }
 

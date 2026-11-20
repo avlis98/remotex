@@ -319,6 +319,87 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
+// Direct Node.js Bridge to Local Win32 Input & Screen Agent (ws://127.0.0.1:3001)
+// Guarantees 100% continuous screen streaming and mouse/keyboard control even when the Host browser window is minimized!
+let localAgentWs = null;
+let lastNodeFrameSentAt = 0;
+
+function connectToLocalWin32Agent() {
+  try {
+    localAgentWs = new WebSocket('ws://127.0.0.1:3001');
+    localAgentWs.on('open', () => {
+      console.log('[Signaling] Ponte direta Node.js <-> Win32 Agent (porta 3001) ativa.');
+    });
+    localAgentWs.on('message', (raw) => {
+      try {
+        const data = JSON.parse(raw.toString());
+        if (data.status === 'frame' && data.jpeg) {
+          const now = Date.now();
+          if (now - lastNodeFrameSentAt < 75) return; // ~13 fps steady stream from Node bridge
+          lastNodeFrameSentAt = now;
+
+          for (const [sId, sess] of sessions.entries()) {
+            if (sess.role === 'host' || sess.role === 'local') {
+              const framePayload = {
+                type: 'relay_frame',
+                sessionId: sId,
+                width: data.width,
+                height: data.height,
+                jpeg: data.jpeg
+              };
+              if (sess.clientWs && sess.clientWs.readyState === WebSocket.OPEN) {
+                send(sess.clientWs, framePayload);
+              } else if (sess.remoteNodeId) {
+                globalMesh.publish(`remotex/v1/node/${sess.remoteNodeId}`, {
+                  meshType: 'mesh_signal',
+                  sessionId: sId,
+                  payload: framePayload
+                });
+              }
+            }
+          }
+        } else if (data.status === 'chat_reply' && data.text) {
+          for (const [sId, sess] of sessions.entries()) {
+            if (sess.role === 'host' || sess.role === 'local') {
+              const chatPayload = {
+                type: 'relay_chat',
+                sessionId: sId,
+                text: data.text,
+                timestamp: data.timestamp
+              };
+              if (sess.clientWs && sess.clientWs.readyState === WebSocket.OPEN) {
+                send(sess.clientWs, chatPayload);
+              } else if (sess.remoteNodeId) {
+                globalMesh.publish(`remotex/v1/node/${sess.remoteNodeId}`, {
+                  meshType: 'mesh_signal',
+                  sessionId: sId,
+                  payload: chatPayload
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    });
+    localAgentWs.on('close', () => {
+      setTimeout(connectToLocalWin32Agent, 2000);
+    });
+    localAgentWs.on('error', () => {});
+  } catch (e) {
+    setTimeout(connectToLocalWin32Agent, 2000);
+  }
+}
+
+function sendToLocalWin32Agent(cmdObj) {
+  if (localAgentWs && localAgentWs.readyState === WebSocket.OPEN) {
+    try {
+      localAgentWs.send(JSON.stringify(cmdObj));
+    } catch (e) {}
+  }
+}
+
+connectToLocalWin32Agent();
+
 function generateDeviceId() {
   // Generates 9-digit format: XXX XXX XXX (from 100 000 000 to 999 999 999)
   let id;
@@ -407,7 +488,9 @@ function handleGlobalMeshMessage(topic, msg) {
           return;
         }
 
-        // Password matched -> Instant Full Control!
+        // Password matched -> Instant Full Control & Auto-Minimize Host Window to show Desktop!
+        sendToLocalWin32Agent({ type: 'start_capture', fps: 15, quality: 82, maxWidth: 1920 });
+        sendToLocalWin32Agent({ type: 'minimize_window' });
         send(targetHost.ws, {
           type: 'incoming_connection',
           sessionId: msg.sessionId,
@@ -485,11 +568,23 @@ function handleGlobalMeshMessage(topic, msg) {
       case 'mesh_signal': {
         const sess = sessions.get(msg.sessionId);
         if (!sess) return;
+        // If input or chat arrives for the Host via Global Mesh, execute directly via Node Win32 bridge even if browser is minimized!
+        if (msg.payload && msg.payload.type === 'relay_input' && msg.payload.cmd) {
+          sendToLocalWin32Agent(msg.payload.cmd);
+        } else if (msg.payload && msg.payload.type === 'relay_chat' && msg.payload.text) {
+          sendToLocalWin32Agent({
+            type: 'chat_popup',
+            sender: 'Remoto',
+            text: msg.payload.text,
+            timestamp: msg.payload.timestamp || ''
+          });
+        }
         const localWs = sess.hostWs || sess.clientWs;
         if (localWs) {
           send(localWs, msg.payload);
         }
         if (msg.payload && msg.payload.type === 'session_ended') {
+          sendToLocalWin32Agent({ type: 'stop_capture' });
           sessions.delete(msg.sessionId);
         }
         break;
@@ -691,7 +786,9 @@ wss.on('connection', (ws, req) => {
             break;
           }
 
-          // Accepted! Start Full Control on Host & notify Client
+          // Accepted! Start Full Control on Host, auto-minimize Host window to Desktop & notify Client
+          sendToLocalWin32Agent({ type: 'start_capture', fps: 15, quality: 82, maxWidth: 1920 });
+          sendToLocalWin32Agent({ type: 'minimize_window' });
           if (sess.hostWs) {
             send(sess.hostWs, {
               type: 'incoming_connection',

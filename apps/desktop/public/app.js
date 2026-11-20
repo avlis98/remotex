@@ -503,15 +503,20 @@
       });
     }
 
-    // Window controls
+    // Window controls (Real native Win32 minimize — NO alert() or confirm() that freezes remote control!)
     if (winClose) {
       winClose.addEventListener('click', () => {
-        if (confirm('Deseja minimizar ou fechar o RemoteX?')) window.close();
+        // Minimize instead of closing if a remote session is active as host, or close cleanly without blocking dialog
+        if (activeSessionId) {
+          fetch('/api/system/minimize', { method: 'POST' }).catch(() => {});
+        } else {
+          window.close();
+        }
       });
     }
     if (winMinimize) {
       winMinimize.addEventListener('click', () => {
-        alert('RemoteX minimizado para a bandeja do sistema.');
+        fetch('/api/system/minimize', { method: 'POST' }).catch(() => {});
       });
     }
     if (winMaximize) {
@@ -1096,8 +1101,8 @@
         break;
 
       case 'session_ended':
-        alert(msg.reason || 'Sessão finalizada.');
         endSessionLocally();
+        showConnectError(msg.reason || 'Sessão finalizada.');
         break;
     }
   }
@@ -1149,13 +1154,16 @@
     btnStartHostScreen.classList.add('active');
     hostStreamLabel.textContent = 'Controle Total Ativo';
 
-    // 1. Iniciar imediatamente captura de tela nativa Win32 em Alta Definição (Full HD 1080p @ 82% nitidez)
+    // 1. Iniciar imediatamente captura de tela nativa Win32 em Alta Definição (Full HD 1080p @ 82% nitidez) e minimizar janela local para ir direto para a Área de Trabalho
     if (localInputWs && localInputWs.readyState === WebSocket.OPEN) {
       localInputWs.send(JSON.stringify({
         type: 'start_capture',
         fps: 15,
         quality: 82,
         maxWidth: 1920
+      }));
+      localInputWs.send(JSON.stringify({
+        type: 'minimize_window'
       }));
     }
 
