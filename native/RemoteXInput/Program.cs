@@ -262,7 +262,7 @@ namespace RemoteX.NativeInput
             chatHistoryBox.SelectionLength = 0;
             chatHistoryBox.SelectionColor = isSelf ? Color.FromArgb(0, 194, 255) : Color.FromArgb(52, 211, 153);
             chatHistoryBox.SelectionFont = new Font("Segoe UI", 9f, FontStyle.Bold);
-            chatHistoryBox.AppendText($"[{timeStr}] {sender}: ");
+            chatHistoryBox.AppendText("[" + timeStr + "] " + sender + ": ");
 
             chatHistoryBox.SelectionColor = Color.White;
             chatHistoryBox.SelectionFont = new Font("Segoe UI", 9.5f, FontStyle.Regular);
