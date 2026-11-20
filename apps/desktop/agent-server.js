@@ -1,11 +1,41 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const { WebSocketServer, WebSocket } = require('ws');
 
 const HTTP_PORT = process.env.PORT || 3000;
 const WS_PORT = process.env.INPUT_WS_PORT || 3001;
+const ROOT_DIR = path.resolve(__dirname, '../..');
+const VBS_LAUNCHER_PATH = path.join(ROOT_DIR, 'RemoteX.vbs');
+
+function isLoopbackAddress(addr) {
+  if (!addr) return false;
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+function checkWindowsAutoStart(callback) {
+  execFile('reg.exe', ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'RemoteX'], { windowsHide: true }, (err, stdout) => {
+    if (err || !stdout || !stdout.includes('RemoteX')) {
+      callback(false);
+    } else {
+      callback(true);
+    }
+  });
+}
+
+function setWindowsAutoStart(enable, callback) {
+  if (enable) {
+    const val = `wscript.exe "${VBS_LAUNCHER_PATH}"`;
+    execFile('reg.exe', ['add', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'RemoteX', '/t', 'REG_SZ', '/d', val, '/f'], { windowsHide: true }, (err) => {
+      callback(!err);
+    });
+  } else {
+    execFile('reg.exe', ['delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'RemoteX', '/f'], { windowsHide: true }, () => {
+      callback(true);
+    });
+  }
+}
 
 // Path to compiled native Win32 input & screen capture agent (.NET Framework 4.8 native Win32)
 const INPUT_EXE_PATH = path.resolve(__dirname, '../../native/RemoteXInput/bin/Release/net8.0/RemoteXInput.exe');
@@ -102,15 +132,52 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+  // Security Hardening: Only allow local machine (loopback) to access local desktop UI & control APIs
+  if (!isLoopbackAddress(req.socket.remoteAddress)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('403 Forbidden - Localhost Only');
+    return;
+  }
+
   if (req.url === '/api/info') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      platform: process.platform,
-      arch: process.arch,
-      nodeVersion: process.version,
-      hasNativeInput: !!inputProcess,
-      inputAgentPid: inputProcess ? inputProcess.pid : null
-    }));
+    checkWindowsAutoStart((autoStartEnabled) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        platform: process.platform,
+        arch: process.arch,
+        nodeVersion: process.version,
+        hasNativeInput: !!inputProcess,
+        inputAgentPid: inputProcess ? inputProcess.pid : null,
+        autoStartEnabled
+      }));
+    });
+    return;
+  }
+
+  if (req.url === '/api/system/autostart' && req.method === 'GET') {
+    checkWindowsAutoStart((enabled) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', enabled }));
+    });
+    return;
+  }
+
+  if (req.url === '/api/system/autostart' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        const enable = !!parsed.enabled;
+        setWindowsAutoStart(enable, (ok) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: ok ? 'ok' : 'error', enabled: enable }));
+        });
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error' }));
+      }
+    });
     return;
   }
 
@@ -146,7 +213,13 @@ const server = http.createServer((req, res) => {
 // WebSocket Server for Local Host Input Injection & Native Screen Capture Stream
 const wss = new WebSocketServer({ port: WS_PORT });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  // Security Hardening: Reject any non-localhost connection attempting to inject Win32 mouse/keyboard commands
+  if (!isLoopbackAddress(req.socket.remoteAddress)) {
+    try { ws.close(); } catch (e) {}
+    return;
+  }
+
   localClients.add(ws);
   primaryLocalClient = ws;
 

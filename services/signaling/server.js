@@ -11,8 +11,36 @@ const GLOBAL_SECRET = 'RemoteX-Global-Mesh-Key-2026-v1';
 // In-memory state
 // devices: Map<deviceId, { ws, password, unattendedPassword, hostname, os, connectedAt }>
 const devices = new Map();
-// sessions: Map<sessionId, { sessionId, hostId, clientId, clientWs, hostWs, remoteNodeId, role, startedAt }>
+// sessions: Map<sessionId, { sessionId, hostId, clientId, clientWs, hostWs, remoteNodeId, role, sessionKey, startedAt }>
 const sessions = new Map();
+// Brute-force protection: Map<senderKey, { count, blockedUntil }>
+const failedAuthAttempts = new Map();
+
+function isSenderRateLimited(senderKey) {
+  const entry = failedAuthAttempts.get(senderKey);
+  if (!entry) return false;
+  if (entry.blockedUntil && Date.now() < entry.blockedUntil) {
+    return true;
+  }
+  if (entry.blockedUntil && Date.now() >= entry.blockedUntil) {
+    failedAuthAttempts.delete(senderKey);
+  }
+  return false;
+}
+
+function recordFailedAuth(senderKey) {
+  const entry = failedAuthAttempts.get(senderKey) || { count: 0, blockedUntil: 0 };
+  entry.count += 1;
+  if (entry.count >= 5) {
+    entry.blockedUntil = Date.now() + 2 * 60 * 1000; // Block for 2 minutes after 5 wrong passwords
+    console.warn(`[Security] Bloqueio temporário anti-força-bruta ativado para ${senderKey} (2 min)`);
+  }
+  failedAuthAttempts.set(senderKey, entry);
+}
+
+function clearFailedAuth(senderKey) {
+  failedAuthAttempts.delete(senderKey);
+}
 
 const PUBLIC_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -45,28 +73,35 @@ const GLOBAL_BROKERS = [
   { host: 'test.mosquitto.org', port: 8883 }
 ];
 
-function encryptPayload(obj) {
-  const key = crypto.createHash('sha256').update(GLOBAL_SECRET).digest();
+function encryptPayload(obj, customSecret) {
+  const secretToUse = customSecret || GLOBAL_SECRET;
+  const key = crypto.createHash('sha256').update(secretToUse).digest();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const json = Buffer.from(JSON.stringify(obj), 'utf8');
+  const json = Buffer.from(JSON.stringify({ ...obj, ts: Date.now() }), 'utf8');
   const enc = Buffer.concat([cipher.update(json), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, enc]).toString('base64');
 }
 
-function decryptPayload(b64) {
+function decryptPayload(b64, customSecret) {
   try {
     const raw = Buffer.from(b64, 'base64');
     if (raw.length < 28) return null;
-    const key = crypto.createHash('sha256').update(GLOBAL_SECRET).digest();
+    const secretToUse = customSecret || GLOBAL_SECRET;
+    const key = crypto.createHash('sha256').update(secretToUse).digest();
     const iv = raw.subarray(0, 12);
     const tag = raw.subarray(12, 28);
     const enc = raw.subarray(28);
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(tag);
     const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
-    return JSON.parse(dec.toString('utf8'));
+    const parsed = JSON.parse(dec.toString('utf8'));
+    // Anti-replay window: reject packets older than 5 minutes
+    if (parsed.ts && Math.abs(Date.now() - parsed.ts) > 5 * 60 * 1000) {
+      return null;
+    }
+    return parsed;
   } catch (e) {
     return null;
   }
@@ -317,12 +352,24 @@ function handleGlobalMeshMessage(topic, msg) {
           return;
         }
 
+        const senderRateKey = `mesh:${msg.clientNodeId}:${targetId}`;
+        if (isSenderRateLimited(senderRateKey)) {
+          globalMesh.publish(`remotex/v1/node/${msg.clientNodeId}`, {
+            meshType: 'mesh_connect_error',
+            sessionId: msg.sessionId,
+            code: 'TOO_MANY_ATTEMPTS',
+            message: 'Muitas tentativas de senha incorretas. Aguarde 2 minutos e tente novamente.'
+          });
+          return;
+        }
+
         const providedPassword = String(msg.password || '').trim();
         const isTempPasswordValid = providedPassword && targetHost.password && targetHost.password === providedPassword;
         const isUnattendedValid = providedPassword && targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
 
         // If password was typed but is wrong (and not empty interactive approval request)
         if (providedPassword && !isTempPasswordValid && !isUnattendedValid) {
+          recordFailedAuth(senderRateKey);
           globalMesh.publish(`remotex/v1/node/${msg.clientNodeId}`, {
             meshType: 'mesh_connect_error',
             sessionId: msg.sessionId,
@@ -331,6 +378,7 @@ function handleGlobalMeshMessage(topic, msg) {
           });
           return;
         }
+        clearFailedAuth(senderRateKey);
 
         sessions.set(msg.sessionId, {
           sessionId: msg.sessionId,
@@ -504,10 +552,21 @@ wss.on('connection', (ws, req) => {
           const targetHost = devices.get(targetId);
           // 1. If target host is on this same signaling server, connect directly
           if (targetHost && targetHost.ws.readyState === WebSocket.OPEN) {
+            const localRateKey = `local:${clientIp}:${targetId}`;
+            if (isSenderRateLimited(localRateKey)) {
+              send(ws, {
+                type: 'connect_error',
+                code: 'TOO_MANY_ATTEMPTS',
+                message: 'Muitas tentativas de senha incorretas. Aguarde 2 minutos e tente novamente.'
+              });
+              return;
+            }
+
             const isTempPasswordValid = providedPassword && targetHost.password && targetHost.password === providedPassword;
             const isUnattendedValid = providedPassword && targetHost.unattendedPassword && targetHost.unattendedPassword === providedPassword;
 
             if (providedPassword && !isTempPasswordValid && !isUnattendedValid) {
+              recordFailedAuth(localRateKey);
               send(ws, {
                 type: 'connect_error',
                 code: 'INVALID_PASSWORD',
@@ -515,6 +574,7 @@ wss.on('connection', (ws, req) => {
               });
               return;
             }
+            clearFailedAuth(localRateKey);
 
             const sessionId = crypto.randomUUID();
             sessions.set(sessionId, {

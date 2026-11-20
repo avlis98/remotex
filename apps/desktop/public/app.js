@@ -554,6 +554,38 @@
       alert('Senha permanente salva com sucesso!');
     });
 
+    // Windows Auto-Start Toggle (Syncs directly with Windows Registry HKCU\...\Run via /api/system/autostart)
+    const autostartToggle = document.getElementById('autostart-toggle');
+    const autostartSavedPill = document.getElementById('autostart-saved-pill');
+    if (autostartToggle) {
+      fetch('/api/system/autostart')
+        .then(r => r.json())
+        .then(data => {
+          if (data && typeof data.enabled === 'boolean') {
+            autostartToggle.checked = data.enabled;
+            if (autostartSavedPill) autostartSavedPill.classList.toggle('hidden', !data.enabled);
+          }
+        })
+        .catch(() => {});
+
+      autostartToggle.addEventListener('change', async () => {
+        const enable = autostartToggle.checked;
+        try {
+          const res = await fetch('/api/system/autostart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enable })
+          });
+          const data = await res.json();
+          if (data && data.status === 'ok') {
+            if (autostartSavedPill) autostartSavedPill.classList.toggle('hidden', !enable);
+          }
+        } catch (e) {
+          alert('Erro ao atualizar inicialização com o Windows.');
+        }
+      });
+    }
+
     // ID formatting: 000 000 000
     remoteDeviceIdInput.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '').substring(0, 9);
