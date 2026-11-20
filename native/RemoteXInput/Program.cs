@@ -519,22 +519,6 @@ namespace RemoteX.NativeInput
                 using (Graphics g = Graphics.FromImage(reusableFullBmp))
                 {
                     g.CopyFromScreen(left, top, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
-
-                    // Draw mouse cursor onto captured frame
-                    CURSORINFO pci = new CURSORINFO();
-                    pci.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
-                    if (GetCursorInfo(out pci) && (pci.flags & CURSOR_SHOWING) != 0 && pci.hCursor != IntPtr.Zero)
-                    {
-                        IntPtr hdc = g.GetHdc();
-                        try
-                        {
-                            DrawIcon(hdc, pci.ptScreenPos.x - left, pci.ptScreenPos.y - top, pci.hCursor);
-                        }
-                        finally
-                        {
-                            g.ReleaseHdc(hdc);
-                        }
-                    }
                 }
 
                 using (MemoryStream ms = new MemoryStream())
