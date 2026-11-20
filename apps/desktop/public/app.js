@@ -51,6 +51,8 @@
   let unreadChatCount = 0;
   let isChatOpen = false;
   let isFilesOpen = false;
+  let pendingAutoOpenFiles = false;
+  let currentFilterMode = 'all';
 
   // File Transfer State
   let activeTransfers = new Map(); // transferId -> { name, size, receivedBytes, chunks, startTime, isIncoming, canceled }
@@ -326,14 +328,24 @@
     const linkCardPreauth = document.getElementById('link-card-preauth');
     const btnCardAbout = document.getElementById('btn-card-about');
     const btnClosePromoCard = document.getElementById('btn-close-promo-card');
+    const cardNewsMesh = document.getElementById('card-news-mesh');
+    const cardNewsUnattended = document.getElementById('card-news-unattended');
+    const cardNewsDiscover = document.getElementById('card-news-discover');
+    const cardNewsQuality = document.getElementById('card-news-quality');
+    const linkViewAll = document.getElementById('link-view-all');
 
     if (bannerLinkUnattended) bannerLinkUnattended.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('settings'); });
-    if (linkCardUnattended) linkCardUnattended.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('settings'); });
+    if (linkCardUnattended) linkCardUnattended.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); switchMainFilter('settings'); });
+    if (cardNewsUnattended) cardNewsUnattended.addEventListener('click', () => switchMainFilter('settings'));
     if (btnTogglePwdBadge) btnTogglePwdBadge.addEventListener('click', () => switchMainFilter('settings'));
     if (bannerLinkShare) bannerLinkShare.addEventListener('click', async (e) => { e.preventDefault(); await ensureHostScreenCapture(); });
-    if (linkCardPreauth) linkCardPreauth.addEventListener('click', async (e) => { e.preventDefault(); await ensureHostScreenCapture(); });
-    if (linkCardDiscover) linkCardDiscover.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('discovered'); });
-    if (btnCardAbout) btnCardAbout.addEventListener('click', () => switchMainFilter('settings'));
+    if (linkCardPreauth) linkCardPreauth.addEventListener('click', async (e) => { e.preventDefault(); e.stopPropagation(); await ensureHostScreenCapture(); });
+    if (cardNewsQuality) cardNewsQuality.addEventListener('click', async () => { await ensureHostScreenCapture(); });
+    if (linkCardDiscover) linkCardDiscover.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); switchMainFilter('discovered'); });
+    if (cardNewsDiscover) cardNewsDiscover.addEventListener('click', () => switchMainFilter('discovered'));
+    if (btnCardAbout) btnCardAbout.addEventListener('click', (e) => { e.stopPropagation(); switchMainFilter('settings'); });
+    if (cardNewsMesh) cardNewsMesh.addEventListener('click', () => switchMainFilter('settings'));
+    if (linkViewAll) linkViewAll.addEventListener('click', (e) => { e.preventDefault(); switchMainFilter('recents'); });
     if (btnClosePromoCard) {
       btnClosePromoCard.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -376,6 +388,7 @@
     const authModalRemember = document.getElementById('auth-modal-remember');
     const btnCloseAuthModal = document.getElementById('btn-close-auth-modal');
     const btnCancelAuthModal = document.getElementById('btn-cancel-auth-modal');
+    const btnSaveOnlyAuthModal = document.getElementById('btn-save-only-auth-modal');
     const btnAddFavoriteDevice = document.getElementById('btn-add-favorite-device');
 
     function closeAuthModal() {
@@ -383,6 +396,24 @@
     }
     if (btnCloseAuthModal) btnCloseAuthModal.addEventListener('click', closeAuthModal);
     if (btnCancelAuthModal) btnCancelAuthModal.addEventListener('click', closeAuthModal);
+
+    if (btnSaveOnlyAuthModal) {
+      btnSaveOnlyAuthModal.addEventListener('click', () => {
+        const tId = targetIdFormat(authModalDeviceId.value.trim());
+        const alias = authModalAlias.value.trim();
+        const pwd = authModalPassword.value.trim();
+        if (!tId || tId.replace(/\D/g, '').length < 9) {
+          alert('Digite um ID válido de 9 dígitos.');
+          return;
+        }
+        upsertSavedDevice(tId, {
+          alias: alias || 'Computador Remoto',
+          favorite: true,
+          savedPassword: authModalRemember.checked ? pwd : ''
+        });
+        closeAuthModal();
+      });
+    }
 
     if (authModalDeviceId) {
       authModalDeviceId.addEventListener('input', (e) => {
@@ -718,12 +749,25 @@
   }
 
   function updateSignalingStatus(status, text) {
-    if (signalingStatusEl) signalingStatusEl.className = `status-pill status-${status}`;
+    if (signalingStatusEl) {
+      signalingStatusEl.style.background = status === 'connected' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.15)';
+      signalingStatusEl.style.borderColor = status === 'connected' ? 'rgba(16, 185, 129, 0.28)' : 'rgba(245, 158, 11, 0.35)';
+      signalingStatusEl.style.color = status === 'connected' ? '#34D399' : '#FCD34D';
+    }
+    const topDot = document.getElementById('top-status-dot');
+    if (topDot) {
+      topDot.style.backgroundColor = status === 'connected' ? '#10B981' : '#F59E0B';
+      topDot.style.boxShadow = status === 'connected' ? '0 0 8px #10B981' : '0 0 8px #F59E0B';
+    }
     if (signalingTextEl) signalingTextEl.textContent = text;
     const sidebarStatus = document.getElementById('sidebar-status-text');
     if (sidebarStatus) sidebarStatus.textContent = status === 'connected' ? 'Online' : 'Conectando...';
     const hostBadge = document.getElementById('host-status-badge');
-    if (hostBadge) hostBadge.textContent = status === 'connected' ? 'Online – Pronto para conectar' : 'Conectando ao servidor...';
+    if (hostBadge) {
+      hostBadge.textContent = status === 'connected'
+        ? 'RemoteX Global Mesh P2P Ativo — Pronto para conectar a qualquer computador sem configuração.'
+        : 'Conectando à Rede Global RemoteX...';
+    }
   }
 
   function registerAsHost() {
@@ -1012,9 +1056,6 @@
       console.error('[Controller] Erro ao aplicar SDP Answer:', e);
     }
   }
-
-  let pendingAutoOpenFiles = false;
-  let currentFilterMode = 'all';
 
   function getSavedDevicesMap() {
     try {
@@ -1689,9 +1730,23 @@
   function loadRecentDevices(filter = 'all') {
     currentFilterMode = filter;
     let recents = JSON.parse(localStorage.getItem('remotex_recents') || '[]').map(targetIdFormat);
-    const metaMap = getSavedDevicesMap();
+    let metaMap = getSavedDevicesMap();
 
-    // If completely empty on first install, include the current device in Discovered
+    // Se a lista estiver vazia na primeira execução, cria os 3 cards visuais padrão igual ao layout AnyDesk
+    if (recents.length === 0) {
+      const defaultCards = [
+        { id: myDeviceId || '167 009 289', alias: 'Este Dispositivo (Local)', favorite: true, wallpaperIdx: 0 },
+        { id: '128 556 343', alias: 'Escritório - SP', favorite: false, wallpaperIdx: 1 },
+        { id: '153 518 927', alias: 'Servidor Principal', favorite: false, wallpaperIdx: 2 }
+      ];
+      recents = defaultCards.map(d => d.id);
+      defaultCards.forEach(d => {
+        metaMap[d.id] = { ...(metaMap[d.id] || {}), ...d };
+      });
+      localStorage.setItem('remotex_recents', JSON.stringify(recents));
+      localStorage.setItem('remotex_devices_meta', JSON.stringify(metaMap));
+    }
+
     if (filter === 'discovered' && myDeviceId && !recents.includes(myDeviceId)) {
       recents = [myDeviceId, ...recents];
     }
